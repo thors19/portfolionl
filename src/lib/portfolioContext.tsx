@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { StockPosition, CryptoPosition, MetalPosition, DividendRecord, DoelgewichtSettings, MetaalType } from "./types";
 import { getExchangeCurrency } from "./exchangeMap";
 
@@ -46,17 +47,23 @@ interface PortfolioContextType {
 }
 
 const PortfolioContext = createContext<PortfolioContextType | null>(null);
-const STORAGE_KEY = "portfolionl-v1";
 
-function load() {
+// Per-user storage keys
+function storageKey(userId: string | null | undefined) {
+  return userId ? `portfolionl_${userId}_v1` : null;
+}
+
+function load(key: string | null) {
+  if (!key) return {};
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : {};
   } catch { return {}; }
 }
 
-function save(data: object) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+function save(key: string | null, data: object) {
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
 }
 
 function buildStooqParam(s: StockPosition): string {
@@ -65,6 +72,7 @@ function buildStooqParam(s: StockPosition): string {
 }
 
 export function PortfolioProvider({ children }: { children: ReactNode }) {
+  const { userId, isLoaded } = useAuth();
   const [stocks, setStocksState] = useState<StockPosition[]>([]);
   const [crypto, setCryptoState] = useState<CryptoPosition[]>([]);
   const [metals, setMetalsState] = useState<MetalPosition[]>([]);
@@ -73,21 +81,42 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  // Load data from user-specific localStorage once Clerk is ready
   useEffect(() => {
-    const saved = load();
+    if (!isLoaded) return;
+    const key = storageKey(userId);
+    const saved = load(key);
     setStocksState(saved.stocks ?? []);
     setCryptoState(saved.crypto ?? []);
     setMetalsState(saved.metals ?? []);
     setDividendsState(saved.dividends ?? []);
     setDoelgewichtState(saved.doelgewicht ?? DEFAULT_DOELGEWICHT);
+    setCurrentUserId(userId ?? null);
     setHydrated(true);
-  }, []);
+  }, [isLoaded, userId]);
+
+  // Reset data when user changes (logout/login as someone else)
+  useEffect(() => {
+    if (!isLoaded || !hydrated) return;
+    if (userId !== currentUserId) {
+      const key = storageKey(userId);
+      const saved = load(key);
+      setStocksState(saved.stocks ?? []);
+      setCryptoState(saved.crypto ?? []);
+      setMetalsState(saved.metals ?? []);
+      setDividendsState(saved.dividends ?? []);
+      setDoelgewichtState(saved.doelgewicht ?? DEFAULT_DOELGEWICHT);
+      setCurrentUserId(userId ?? null);
+    }
+  }, [userId, currentUserId, isLoaded, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
-    save({ stocks, crypto, metals, dividends, doelgewicht });
-  }, [stocks, crypto, metals, dividends, doelgewicht, hydrated]);
+    const key = storageKey(userId);
+    save(key, { stocks, crypto, metals, dividends, doelgewicht });
+  }, [stocks, crypto, metals, dividends, doelgewicht, hydrated, userId]);
 
   const refreshPrices = useCallback(async () => {
     setIsLoading(true);
