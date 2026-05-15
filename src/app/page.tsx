@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { useAuth, SignInButton, SignUpButton } from "@clerk/nextjs";
 import {
   TrendingUp, FileText, BarChart2, Calculator, Bitcoin, Gem,
   ArrowRight, CheckCircle, Shield, Zap,
@@ -54,7 +55,14 @@ const colorMap: Record<string, string> = {
 
 export default function LandingPage() {
   const router = useRouter();
-  void router;
+  const { isSignedIn, isLoaded } = useAuth();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   return (
     <div className="bg-white">
