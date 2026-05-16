@@ -48,9 +48,10 @@ export interface StockPosition {
   aantalAandelen: number;
   exchange: string;
   currency: string;
-  huidigeKoers: number | null;
+  huidigeKoers: number | null;     // altijd in EUR (voor berekeningen)
   huidigeKoersValuta: string;
-  marktwaarde: number | null;  // EUR
+  lokaleKoers?: number | null;     // prijs in originele valuta (voor weergave; ingevuld na live-refresh)
+  marktwaarde: number | null;      // EUR
   degiroKoers: number | null;
   degiroWaardeEur: number | null;
   tickerBron: TickerBron;

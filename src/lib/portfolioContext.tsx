@@ -213,7 +213,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         updates.push(
           fetch(`/api/quotes?tickers=${params.join(",")}`)
             .then((r) => r.json())
-            .then((data: Record<string, { priceEur: number; usedTicker?: string; error?: string }>) => {
+            .then((data: Record<string, { priceEur: number; pricOriginal: number; currency: string; usedTicker?: string; error?: string }>) => {
               const now = Date.now();
               setStocksState((prev) => prev.map((s) => {
                 if (s.tickerBron === "pending" || s.tickerBron === "onbekend") return s;
@@ -227,11 +227,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
                     warning: `stooq:${s.ticker}`,  // compact formaat — component parseert dit
                   };
                 }
-                // Succesvol — eventueel effectieve ticker opslaan als die afweek
+                // Succesvol — sla zowel EUR-koers als lokale koers op
                 return {
                   ...s,
                   huidigeKoers: entry.priceEur,
                   huidigeKoersValuta: "EUR",
+                  lokaleKoers: entry.pricOriginal ?? entry.priceEur,
+                  currency: entry.currency ?? s.currency,
                   marktwaarde: entry.priceEur * s.aantalAandelen,
                   lastPriceTimestamp: now,
                   effectieveTicker: entry.usedTicker ?? s.ticker,

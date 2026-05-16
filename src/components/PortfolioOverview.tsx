@@ -17,6 +17,39 @@ const METAL_LABELS: Record<MetaalType, string> = {
 type SortCol = "naam" | "koers" | "rendementEur" | "rendementPct" | "waarde";
 type SortDir = "asc" | "desc";
 
+const CURRENCY_SYMBOL: Record<string, string> = {
+  EUR: "€", USD: "$", GBP: "£", CHF: "Fr", JPY: "¥",
+  CAD: "C$", AUD: "A$", HKD: "HK$", SEK: "kr", NOK: "kr",
+  DKK: "kr", PLN: "zł", TRY: "₺", BRL: "R$", CNY: "¥",
+};
+
+function formatKoers(lokaleKoers: number | null, eurKoers: number | null, currency: string): React.ReactNode {
+  const sym = CURRENCY_SYMBOL[currency] ?? currency;
+  const isEur = currency === "EUR";
+
+  if (lokaleKoers != null && lokaleKoers > 0) {
+    if (isEur) {
+      return <span className="text-slate-700 text-xs">€ {fEur(lokaleKoers)}</span>;
+    }
+    return (
+      <div>
+        <div className="text-slate-700 text-xs font-medium">
+          {sym} {lokaleKoers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+        </div>
+        {eurKoers != null && (
+          <div className="text-[10px] text-slate-400">
+            ≈ € {fEur(eurKoers)}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (eurKoers != null) {
+    return <span className="text-slate-700 text-xs">€ {fEur(eurKoers)}</span>;
+  }
+  return null;
+}
+
 function SortIcon({ col, activeCol, dir }: { col: SortCol; activeCol: SortCol; dir: SortDir }) {
   if (col !== activeCol) return <ArrowUpDown className="w-3 h-3 inline ml-1 text-slate-300" />;
   return dir === "asc"
@@ -300,8 +333,10 @@ export default function PortfolioOverview() {
                         <span className="flex items-center justify-end gap-1 text-slate-400 text-xs">
                           <Loader2 className="w-3 h-3 animate-spin" />Opzoeken…
                         </span>
-                      ) : s.huidigeKoers != null ? (
-                        <span className="text-slate-700 text-xs">€ {fEur(s.huidigeKoers)}</span>
+                      ) : (s.lokaleKoers != null || s.huidigeKoers != null) ? (
+                        <div className="flex justify-end">
+                          {formatKoers(s.lokaleKoers ?? null, s.huidigeKoers, s.currency)}
+                        </div>
                       ) : s.degiroKoers != null ? (
                         <span className="text-amber-600 flex items-center justify-end gap-1 text-xs">
                           <Clock className="w-3 h-3" />
