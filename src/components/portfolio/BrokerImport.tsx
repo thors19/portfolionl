@@ -114,7 +114,10 @@ export default function BrokerImport({ portfolioId, broker, onDone }: Props) {
               const r = data[s.isin];
               if (r?.stooqTicker) {
                 setCachedISIN(s.isin, r);
-                updateStock(s.id, { ticker: r.stooqTicker, tickerBron: r.source, ...(r.assetType ? { assetType: r.assetType } : {}) });
+                updateStock(s.id, {
+                  ticker: r.stooqTicker, tickerBron: r.source,
+                  ...(r.assetType && r.assetType !== "onbekend" ? { assetType: r.assetType, assetCategorie: r.assetType } : {}),
+                });
               } else {
                 updateStock(s.id, { tickerBron: "onbekend", marktwaarde: s.degiroWaardeEur, warning: `Ticker niet gevonden voor ${s.isin}. DEGIRO koers als fallback.` });
               }

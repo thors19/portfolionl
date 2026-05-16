@@ -36,7 +36,7 @@ const TYPE_BADGE: Record<string, { letter: string; cls: string }> = {
 };
 
 function getBadge(assetType: AssetType, assetCategorie?: AssetCategorie) {
-  if (assetCategorie && TYPE_BADGE[assetCategorie]) return TYPE_BADGE[assetCategorie];
+  if (assetCategorie && assetCategorie !== "onbekend" && TYPE_BADGE[assetCategorie]) return TYPE_BADGE[assetCategorie];
   if (assetType === "etf") return TYPE_BADGE.etf;
   if (assetType === "aandeel") return TYPE_BADGE.aandeel;
   return TYPE_BADGE.onbekend;
