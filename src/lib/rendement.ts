@@ -39,17 +39,28 @@ export interface PositieRendement {
 
 export function berekenPositieRendement(s: StockPosition): PositieRendement {
   const huidig = s.marktwaarde ?? (s.degiroWaardeEur ?? null);
-  const aankoopEUR = s.aankoopkoers != null
-    ? s.aankoopkoers * s.aantalAandelen
-    : null;
-
-  if (huidig == null || aankoopEUR == null || aankoopEUR === 0) {
-    return { geïnvesteerd: aankoopEUR, huidigeWaarde: huidig, rendementEUR: null, rendementPct: null };
+  if (s.aankoopkoers == null || s.aankoopkoers <= 0) {
+    return { geïnvesteerd: null, huidigeWaarde: huidig, rendementEUR: null, rendementPct: null };
   }
 
+  // Non-EUR positie: gebruik de impliciete FX-koers (huidig EUR / huidig lokaal)
+  // om de aankoopkoers (in lokale valuta) correct naar EUR om te rekenen.
+  // Percentage is valuta-onafhankelijk en altijd correct.
+  if (s.lokaleKoers != null && s.lokaleKoers > 0 && s.huidigeKoers != null && s.currency !== "EUR") {
+    const fxRate     = s.huidigeKoers / s.lokaleKoers;          // EUR per lokale eenheid
+    const aankoopEUR = s.aankoopkoers * fxRate * s.aantalAandelen;
+    const rPct       = (s.lokaleKoers / s.aankoopkoers - 1) * 100;
+    const rEur       = huidig != null ? huidig - aankoopEUR : null;
+    return { geïnvesteerd: aankoopEUR, huidigeWaarde: huidig, rendementEUR: rEur, rendementPct: rPct };
+  }
+
+  // EUR positie (of nog geen live koers): vergelijk direct
+  const aankoopEUR = s.aankoopkoers * s.aantalAandelen;
+  if (huidig == null || aankoopEUR === 0) {
+    return { geïnvesteerd: aankoopEUR, huidigeWaarde: huidig, rendementEUR: null, rendementPct: null };
+  }
   const rEur = huidig - aankoopEUR;
-  const rPct = (rEur / aankoopEUR) * 100;
-  return { geïnvesteerd: aankoopEUR, huidigeWaarde: huidig, rendementEUR: rEur, rendementPct: rPct };
+  return { geïnvesteerd: aankoopEUR, huidigeWaarde: huidig, rendementEUR: rEur, rendementPct: (rEur / aankoopEUR) * 100 };
 }
 
 export function berekenCryptoRendement(c: CryptoPosition): PositieRendement {

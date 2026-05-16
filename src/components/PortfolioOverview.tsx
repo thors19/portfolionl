@@ -214,6 +214,7 @@ export default function PortfolioOverview() {
   const [sortCol, setSortCol] = useState<SortCol>("waarde");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [displayMode, setDisplayMode] = useState<"EUR" | "lokaal">("EUR");
 
   function handleSort(col: SortCol) {
     if (col === sortCol) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -273,9 +274,26 @@ export default function PortfolioOverview() {
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-800">Alle posities</h2>
-          <p className="text-xs text-slate-400">{activeStocks.length + activeCrypto.length + activeMetals.length} posities</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-slate-400">{activeStocks.length + activeCrypto.length + activeMetals.length} posities</p>
+            {/* Valuta-toggle */}
+            <div className="flex border border-slate-200 rounded-lg overflow-hidden text-xs">
+              <button
+                onClick={() => setDisplayMode("EUR")}
+                className={`px-2.5 py-1.5 font-medium transition-colors ${displayMode === "EUR" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+              >
+                € EUR
+              </button>
+              <button
+                onClick={() => setDisplayMode("lokaal")}
+                className={`px-2.5 py-1.5 font-medium transition-colors ${displayMode === "lokaal" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+              >
+                Lokaal
+              </button>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
@@ -369,7 +387,8 @@ export default function PortfolioOverview() {
                               {fPct(rend.rendementPct)}
                             </div>
                             <div className="text-[10px] text-slate-300">
-                              gk: € {fEur(s.aankoopkoers!)}
+                              {/* aankoopkoers altijd in lokale valuta */}
+                              gk: {CURRENCY_SYMBOL[s.currency] ?? s.currency} {s.aankoopkoers!.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
                             </div>
                           </div>
                           <button
@@ -393,16 +412,37 @@ export default function PortfolioOverview() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      {displayWaarde != null ? (
-                        <div>
-                          <span className="font-semibold text-slate-800 text-sm">€ {fEur(displayWaarde)}</span>
-                          {isFallback && !isPending && (
-                            <div className="flex items-center justify-end gap-1 text-[10px] text-amber-500 mt-0.5">
-                              <Clock className="w-2.5 h-2.5" />DEGIRO slotkoers
+                      {(() => {
+                        // Lokaal-modus: toon waarde in originele valuta
+                        if (displayMode === "lokaal" && s.lokaleKoers != null && s.currency !== "EUR") {
+                          const lokaalWaarde = s.lokaleKoers * s.aantalAandelen;
+                          const sym = CURRENCY_SYMBOL[s.currency] ?? s.currency;
+                          return (
+                            <div>
+                              <span className="font-semibold text-slate-800 text-sm">
+                                {sym} {lokaalWaarde.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
+                              </span>
+                              {displayWaarde != null && (
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  ≈ € {fEur(displayWaarde)}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
+                          );
+                        }
+                        // EUR-modus (standaard)
+                        if (displayWaarde != null) return (
+                          <div>
+                            <span className="font-semibold text-slate-800 text-sm">€ {fEur(displayWaarde)}</span>
+                            {isFallback && !isPending && (
+                              <div className="flex items-center justify-end gap-1 text-[10px] text-amber-500 mt-0.5">
+                                <Clock className="w-2.5 h-2.5" />DEGIRO slotkoers
+                              </div>
+                            )}
+                          </div>
+                        );
+                        return <span className="text-slate-300 text-xs">—</span>;
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-right">
                       {!isPending && s.ticker && (
