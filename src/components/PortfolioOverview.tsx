@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { usePortfolio } from "@/lib/portfolioContext";
-import { AlertTriangle, Clock, Loader2, BarChart2, TrendingUp, TrendingDown, ShieldAlert, ArrowUpDown, ArrowUp, ArrowDown, Info } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { AlertTriangle, Clock, Loader2, BarChart2, TrendingUp, TrendingDown, ShieldAlert, ArrowUpDown, ArrowUp, ArrowDown, Info, Pencil, Check, X } from "lucide-react";
 import Link from "next/link";
 import HistorischGrafiek from "./HistorischGrafiek";
 import { AssetType, MetaalType, StoplossConfig } from "@/lib/types";
 import { berekenPositieRendement, berekenCryptoRendement, fEur, fPct, fEurTeken } from "@/lib/rendement";
+import { saveAankoopkoers } from "@/lib/aankoopkoersStore";
 
 const METAL_LABELS: Record<MetaalType, string> = {
   goud: "Goud", zilver: "Zilver", platina: "Platina", palladium: "Palladium", koper: "Koper",
@@ -123,15 +125,74 @@ function StoplossIndicator({ stoploss, koers, aankoopkoers }: {
   );
 }
 
+// ─── Inline aankoopprijs editor ──────────────────────────────────────────────
+
+function InlineAankoopEditor({ posId, isin, ticker, huidig, onSave, onCancel }: {
+  posId: string;
+  isin: string;
+  ticker: string;
+  huidig: number | null;
+  onSave: (prijs: number) => void;
+  onCancel: () => void;
+}) {
+  const [val, setVal] = useState(huidig != null ? String(huidig).replace(".", ",") : "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+  void posId; void isin; void ticker;
+
+  function commit() {
+    const n = parseFloat(val.replace(",", "."));
+    if (!isNaN(n) && n > 0) onSave(n);
+    else onCancel();
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="0,00"
+        className="w-24 text-right px-2 py-1 border border-blue-400 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button onClick={commit} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Opslaan (Enter)">
+        <Check className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={onCancel} className="p-1 text-slate-400 hover:bg-slate-100 rounded" title="Annuleren (Esc)">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Hoofd component ──────────────────────────────────────────────────────────
+
 export default function PortfolioOverview() {
   const { activeStocks, activeCrypto, activeMetals, updateStock } = usePortfolio();
+  const { userId } = useAuth();
   const [grafiekTicker, setGrafiekTicker] = useState<{ ticker: string; naam: string } | null>(null);
   const [sortCol, setSortCol] = useState<SortCol>("waarde");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function handleSort(col: SortCol) {
     if (col === sortCol) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortCol(col); setSortDir("desc"); }
+  }
+
+  function handleSaveAankoopkoers(posId: string, isin: string, ticker: string, prijs: number) {
+    updateStock(posId, { aankoopkoers: prijs });
+    // Sla op in persistent store (overleeft reimport)
+    const key = isin || ticker;
+    saveAankoopkoers(userId, key, prijs);
+    setEditingId(null);
   }
 
   const hasAnything = activeStocks.length > 0 || activeCrypto.length > 0 || activeMetals.length > 0;
@@ -249,18 +310,51 @@ export default function PortfolioOverview() {
                       ) : <span className="text-slate-300 text-xs">—</span>}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      {rend.rendementEUR != null && rend.rendementPct != null ? (
-                        <div>
-                          <div className={`flex items-center justify-end gap-1 text-xs font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
-                            {rendPos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            {fEurTeken(rend.rendementEUR)}
+                      {editingId === s.id ? (
+                        /* Inline editor actief */
+                        <div className="flex justify-end">
+                          <InlineAankoopEditor
+                            posId={s.id}
+                            isin={s.isin}
+                            ticker={s.ticker}
+                            huidig={s.aankoopkoers}
+                            onSave={(p) => handleSaveAankoopkoers(s.id, s.isin, s.ticker, p)}
+                            onCancel={() => setEditingId(null)}
+                          />
+                        </div>
+                      ) : rend.rendementEUR != null && rend.rendementPct != null ? (
+                        /* Rendement bekend — toon met potlood-knop */
+                        <div className="flex items-center justify-end gap-1 group">
+                          <div className="text-right">
+                            <div className={`flex items-center justify-end gap-1 text-xs font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
+                              {rendPos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                              {fEurTeken(rend.rendementEUR)}
+                            </div>
+                            <div className={`text-xs ${rendPos ? "text-green-500" : "text-red-500"}`}>
+                              {fPct(rend.rendementPct)}
+                            </div>
+                            <div className="text-[10px] text-slate-300">
+                              gk: € {fEur(s.aankoopkoers!)}
+                            </div>
                           </div>
-                          <div className={`text-xs text-right ${rendPos ? "text-green-500" : "text-red-500"}`}>
-                            {fPct(rend.rendementPct)}
-                          </div>
+                          <button
+                            onClick={() => setEditingId(s.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded"
+                            title="Aankoopprijs aanpassen"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
                         </div>
                       ) : (
-                        <span className="text-slate-300 text-xs">Geen aankoopkoers</span>
+                        /* Geen aankoopkoers — toon uitnodiging */
+                        <button
+                          onClick={() => setEditingId(s.id)}
+                          className="flex items-center justify-end gap-1.5 text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg w-full transition-colors"
+                          title="Aankoopprijs invoeren"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Aankoopprijs</span>
+                        </button>
                       )}
                     </td>
                     <td className="px-3 py-3 text-right">

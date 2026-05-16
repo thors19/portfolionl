@@ -4,9 +4,11 @@ import { useState, useRef } from "react";
 import { Upload, CheckCircle, X, Search, AlertTriangle } from "lucide-react";
 import { parseBrokerCSV, inferCategorie } from "@/lib/brokerParser";
 import { usePortfolio } from "@/lib/portfolioContext";
+import { useAuth } from "@clerk/nextjs";
 import { getCachedISIN, setCachedISIN } from "@/lib/isinCache";
 import { StockPosition, CryptoPosition, ISINLookupResult, BrokerNaam } from "@/lib/types";
 import { isISIN } from "@/lib/exchangeMap";
+import { applyStoredAankoopkoersen } from "@/lib/aankoopkoersStore";
 import { v4 as uuidv4 } from "uuid";
 
 interface Props {
@@ -30,6 +32,7 @@ const BROKER_COLORS: Record<string, string> = {
 
 export default function BrokerImport({ portfolioId, broker, onDone }: Props) {
   const { setStocks, addCrypto, updateStock, refreshPrices } = usePortfolio();
+  const { userId } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -67,7 +70,7 @@ export default function BrokerImport({ portfolioId, broker, onDone }: Props) {
     }
 
     // Maak stock posities
-    const newStocks: StockPosition[] = stockPositions.map((p) => ({
+    const rawStocks: StockPosition[] = stockPositions.map((p) => ({
       id: uuidv4(), portfolioId, broker: detected,
       naam: p.naam, ticker: p.ticker, isin: p.isin,
       aantalAandelen: p.aantal, exchange: "", currency: p.valuta,
@@ -77,6 +80,9 @@ export default function BrokerImport({ portfolioId, broker, onDone }: Props) {
       assetType: "onbekend", assetCategorie: inferCategorie(p),
       aankoopkoers: p.aankoopprijs, aankoopdatum: null, stoploss: null,
     }));
+
+    // Herstel handmatig ingevoerde aankoopprijzen als CSV ze niet bevat
+    const newStocks = applyStoredAankoopkoersen(userId, rawStocks);
 
     setStocks(newStocks, portfolioId);
 

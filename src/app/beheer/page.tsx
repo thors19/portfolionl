@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { usePortfolio } from "@/lib/portfolioContext";
+import { useAuth } from "@clerk/nextjs";
 import BrokerImport from "@/components/portfolio/BrokerImport";
 import ManualPosition from "@/components/portfolio/ManualPosition";
 import PortfolioManager from "@/components/portfolio/PortfolioManager";
 import CryptoSection from "@/components/CryptoSection";
 import MetalsSection from "@/components/MetalsSection";
 import DegiroImport from "@/components/DegiroImport";
+import OntbrekendeAankoopprijzen from "@/components/portfolio/OntbrekendeAankoopprijzen";
 import { FileText, Bitcoin, Gem, Target, Trash2, Upload, PlusCircle, FolderOpen } from "lucide-react";
 
 type Tab = "portefeuilles" | "importeren" | "handmatig" | "crypto" | "metalen" | "dividend";
@@ -25,6 +27,8 @@ export default function BeheerPage() {
   const [activeTab, setActiveTab] = useState<Tab>("importeren");
   const [confirmClear, setConfirmClear] = useState(false);
   const { portfolios, stocks, crypto, metals, clearAll, activePortfolioId } = usePortfolio();
+  const { userId } = useAuth();
+  void userId;
 
   const totalPositions = stocks.length + crypto.length + metals.length;
 
@@ -166,6 +170,9 @@ export default function BeheerPage() {
           </div>
         )}
       </div>
+
+      {/* Ontbrekende aankoopprijzen — altijd zichtbaar als er posities zijn */}
+      <OntbrekendeAankoopprijzen />
     </div>
   );
 }
