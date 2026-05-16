@@ -15,8 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 const STOOQ_BASE = "https://stooq.com/q/l/";
 const UA = "Mozilla/5.0 (compatible; portfolionl/1.0)";
 
-// 10-minuten cache
-const cache = new Map<string, { price: number; ts: number }>();
+// 10-minuten cache (inclusief open-prijs voor dagverandering)
 const CACHE_TTL = 10 * 60 * 1000;
 
 // Fallback exchange-suffixen in volgorde van populariteit voor Europese effecten
@@ -27,14 +26,21 @@ const EXCHANGE_FALLBACKS = [
 
 interface StooqResult {
   price: number;
+  open: number | null;
   usedTicker: string;
 }
 
-async function fetchStooqOnce(ticker: string): Promise<number | null> {
-  const hit = cache.get(ticker);
-  if (hit && Date.now() - hit.ts < CACHE_TTL) return hit.price;
+// Cache ook het open-veld
+const cache = new Map<string, { price: number; open?: number; ts: number }>();
 
-  const url = `${STOOQ_BASE}?s=${encodeURIComponent(ticker)}&f=c`;
+interface StooqQuote { price: number; open: number | null; }
+
+async function fetchStooqOnce(ticker: string): Promise<StooqQuote | null> {
+  const hit = cache.get(ticker);
+  if (hit && Date.now() - hit.ts < CACHE_TTL) return { price: hit.price, open: hit.open ?? null };
+
+  // ?f=co → "close,open"
+  const url = `${STOOQ_BASE}?s=${encodeURIComponent(ticker)}&f=co`;
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": UA },
@@ -48,16 +54,23 @@ async function fetchStooqOnce(ticker: string): Promise<number | null> {
     }
 
     const text = (await res.text()).trim();
-    const price = parseFloat(text);
-
-    if (!text || text === "N/D" || text.startsWith("<") || isNaN(price) || price <= 0) {
-      console.log(`[quotes] ${ticker} → N/D (response: "${text.slice(0, 30)}")`);
+    if (!text || text === "N/D" || text.startsWith("<")) {
+      console.log(`[quotes] ${ticker} → N/D`);
       return null;
     }
 
-    console.log(`[quotes] ${ticker} → ${price}`);
-    cache.set(ticker, { price, ts: Date.now() });
-    return price;
+    const parts = text.split(",");
+    const price = parseFloat(parts[0]);
+    const open  = parts[1] ? parseFloat(parts[1]) : null;
+
+    if (isNaN(price) || price <= 0) {
+      console.log(`[quotes] ${ticker} → ongeldig: "${text.slice(0, 30)}"`);
+      return null;
+    }
+
+    console.log(`[quotes] ${ticker} → ${price} (open: ${open})`);
+    cache.set(ticker, { price, open: open ?? undefined, ts: Date.now() });
+    return { price, open: open && !isNaN(open) && open > 0 ? open : null };
   } catch (e) {
     console.log(`[quotes] ${ticker} → fout: ${(e as Error).message}`);
     return null;
@@ -67,16 +80,13 @@ async function fetchStooqOnce(ticker: string): Promise<number | null> {
 async function fetchStooqWithFallback(ticker: string): Promise<StooqResult | null> {
   // Stap 1: probeer ticker precies zoals opgegeven
   const p1 = await fetchStooqOnce(ticker);
-  if (p1 != null) return { price: p1, usedTicker: ticker };
+  if (p1 != null) return { price: p1.price, open: p1.open, usedTicker: ticker };
 
   // Extraheer basis-ticker (zonder exchange-suffix)
   const dotIdx = ticker.lastIndexOf(".");
   const isForex = ticker.includes("eur") || ticker.includes("usd") || ticker.endsWith("=x");
 
-  if (isForex || dotIdx === -1) {
-    // Geen suffix-fallback voor forex of bare tickers
-    return null;
-  }
+  if (isForex || dotIdx === -1) return null;
 
   const base = ticker.slice(0, dotIdx);
   const currentSuffix = ticker.slice(dotIdx);
@@ -87,16 +97,16 @@ async function fetchStooqWithFallback(ticker: string): Promise<StooqResult | nul
     const alt = `${base}${suffix}`;
     const p = await fetchStooqOnce(alt);
     if (p != null) {
-      console.log(`[quotes] Fallback succesvol: ${ticker} → ${alt} (${p})`);
-      return { price: p, usedTicker: alt };
+      console.log(`[quotes] Fallback succesvol: ${ticker} → ${alt} (${p.price})`);
+      return { price: p.price, open: p.open, usedTicker: alt };
     }
   }
 
   // Stap 3: bare ticker zonder suffix
   const p3 = await fetchStooqOnce(base);
   if (p3 != null) {
-    console.log(`[quotes] Bare-ticker succesvol: ${ticker} → ${base} (${p3})`);
-    return { price: p3, usedTicker: base };
+    console.log(`[quotes] Bare-ticker succesvol: ${ticker} → ${base} (${p3.price})`);
+    return { price: p3.price, open: p3.open, usedTicker: base };
   }
 
   console.log(`[quotes] Alle varianten mislukt voor "${ticker}" (geprobeerd: ${ticker}, ${EXCHANGE_FALLBACKS.map(s => base + s).join(", ")}, ${base})`);
@@ -153,7 +163,7 @@ export async function GET(request: NextRequest) {
   // Haal alles parallel op — hoofdtickers met fallback, FX-koersen direct
   const [mainResults, fxPrices] = await Promise.all([
     Promise.all(requests.map((r) => fetchStooqWithFallback(r.ticker))),
-    Promise.all(fxTickers.map((ft) => fetchStooqOnce(ft).then((p) => ({ ticker: ft, price: p })))),
+    Promise.all(fxTickers.map((ft) => fetchStooqOnce(ft).then((q) => ({ ticker: ft, price: q?.price ?? null })))),
   ]);
 
   // Bouw FX-rate map
@@ -165,8 +175,9 @@ export async function GET(request: NextRequest) {
   type QuoteResult = {
     priceEur: number;
     pricOriginal: number;
+    openOriginal: number | null; // openingskoers in originele valuta (voor dagverandering)
     currency: string;
-    usedTicker?: string;   // de Stooq-ticker die daadwerkelijk werkte
+    usedTicker?: string;
     error?: string;
   };
 
@@ -178,9 +189,7 @@ export async function GET(request: NextRequest) {
 
     if (!found) {
       result[ticker] = {
-        priceEur: 0,
-        pricOriginal: 0,
-        currency,
+        priceEur: 0, pricOriginal: 0, openOriginal: null, currency,
         error: `Geen koers gevonden voor "${ticker}" (ook alternatieve notaties geprobeerd).`,
       };
       continue;
@@ -197,6 +206,7 @@ export async function GET(request: NextRequest) {
     result[ticker] = {
       priceEur,
       pricOriginal: found.price,
+      openOriginal: found.open,
       currency,
       usedTicker: found.usedTicker !== ticker ? found.usedTicker : undefined,
     };

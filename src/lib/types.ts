@@ -51,6 +51,7 @@ export interface StockPosition {
   huidigeKoers: number | null;     // altijd in EUR (voor berekeningen)
   huidigeKoersValuta: string;
   lokaleKoers?: number | null;     // prijs in originele valuta (voor weergave; ingevuld na live-refresh)
+  openKoers?: number | null;       // openingskoers vandaag in originele valuta (voor dagverandering)
   marktwaarde: number | null;      // EUR
   degiroKoers: number | null;
   degiroWaardeEur: number | null;

@@ -3,138 +3,82 @@
 import { useState, useRef, useEffect } from "react";
 import { usePortfolio } from "@/lib/portfolioContext";
 import { useAuth } from "@clerk/nextjs";
-import { AlertTriangle, Clock, Loader2, BarChart2, TrendingUp, TrendingDown, ShieldAlert, ArrowUpDown, ArrowUp, ArrowDown, Info, Pencil, Check, X } from "lucide-react";
+import {
+  AlertTriangle, Clock, Loader2, BarChart2,
+  TrendingUp, TrendingDown, ShieldAlert, Pencil, Check, X, Info,
+} from "lucide-react";
 import Link from "next/link";
 import HistorischGrafiek from "./HistorischGrafiek";
-import { AssetType, MetaalType, StoplossConfig } from "@/lib/types";
-import { berekenPositieRendement, berekenCryptoRendement, fEur, fPct, fEurTeken } from "@/lib/rendement";
+import { AssetType, MetaalType, StoplossConfig, AssetCategorie } from "@/lib/types";
+import { berekenPositieRendement, berekenCryptoRendement, fEur, fPct, fEurTeken, berekenPortfolio } from "@/lib/rendement";
 import { saveAankoopkoers } from "@/lib/aankoopkoersStore";
+
+// ─── Constanten ───────────────────────────────────────────────────────────────
 
 const METAL_LABELS: Record<MetaalType, string> = {
   goud: "Goud", zilver: "Zilver", platina: "Platina", palladium: "Palladium", koper: "Koper",
 };
 
-type SortCol = "naam" | "koers" | "rendementEur" | "rendementPct" | "waarde";
-type SortDir = "asc" | "desc";
-
-const CURRENCY_SYMBOL: Record<string, string> = {
-  EUR: "€", USD: "$", GBP: "£", CHF: "Fr", JPY: "¥",
-  CAD: "C$", AUD: "A$", HKD: "HK$", SEK: "kr", NOK: "kr",
-  DKK: "kr", PLN: "zł", TRY: "₺", BRL: "R$", CNY: "¥",
+export const CURRENCY_SYMBOL: Record<string, string> = {
+  EUR: "€", USD: "$", GBP: "£", CHF: "Fr.", JPY: "¥",
+  CAD: "CA$", AUD: "A$", HKD: "HK$", SEK: "kr", NOK: "kr", DKK: "kr",
 };
 
-function formatKoers(lokaleKoers: number | null, eurKoers: number | null, currency: string): React.ReactNode {
+// Type badge: één letter zoals DEGIRO
+const TYPE_BADGE: Record<string, { letter: string; cls: string }> = {
+  etf:       { letter: "E", cls: "bg-blue-100 text-blue-700" },
+  aandeel:   { letter: "A", cls: "bg-green-100 text-green-700" },
+  crypto:    { letter: "C", cls: "bg-purple-100 text-purple-700" },
+  reit:      { letter: "R", cls: "bg-teal-100 text-teal-700" },
+  obligatie: { letter: "O", cls: "bg-slate-100 text-slate-600" },
+  metaal:    { letter: "M", cls: "bg-amber-100 text-amber-700" },
+  onbekend:  { letter: "D", cls: "bg-slate-100 text-slate-400" },
+};
+
+function getBadge(assetType: AssetType, assetCategorie?: AssetCategorie) {
+  if (assetCategorie && TYPE_BADGE[assetCategorie]) return TYPE_BADGE[assetCategorie];
+  if (assetType === "etf") return TYPE_BADGE.etf;
+  if (assetType === "aandeel") return TYPE_BADGE.aandeel;
+  return TYPE_BADGE.onbekend;
+}
+
+function fmt(n: number, currency: string, decimals = 2): string {
   const sym = CURRENCY_SYMBOL[currency] ?? currency;
-  const isEur = currency === "EUR";
-
-  if (lokaleKoers != null && lokaleKoers > 0) {
-    if (isEur) {
-      return <span className="text-slate-700 text-xs">€ {fEur(lokaleKoers)}</span>;
-    }
-    return (
-      <div>
-        <div className="text-slate-700 text-xs font-medium">
-          {sym} {lokaleKoers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-        </div>
-        {eurKoers != null && (
-          <div className="text-[10px] text-slate-400">
-            ≈ € {fEur(eurKoers)}
-          </div>
-        )}
-      </div>
-    );
-  }
-  if (eurKoers != null) {
-    return <span className="text-slate-700 text-xs">€ {fEur(eurKoers)}</span>;
-  }
-  return null;
+  return `${sym} ${n.toLocaleString("nl-NL", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
-function SortIcon({ col, activeCol, dir }: { col: SortCol; activeCol: SortCol; dir: SortDir }) {
-  if (col !== activeCol) return <ArrowUpDown className="w-3 h-3 inline ml-1 text-slate-300" />;
-  return dir === "asc"
-    ? <ArrowUp className="w-3 h-3 inline ml-1 text-blue-500" />
-    : <ArrowDown className="w-3 h-3 inline ml-1 text-blue-500" />;
-}
+// ─── Sub-componenten ──────────────────────────────────────────────────────────
 
-function AssetTypeBadge({ type, id, onUpdate }: { type: AssetType; id: string; onUpdate: (t: AssetType) => void }) {
-  const [editing, setEditing] = useState(false);
-  const cfg: Record<AssetType, string> = {
-    etf: "bg-blue-100 text-blue-700", aandeel: "bg-green-100 text-green-700", onbekend: "bg-slate-100 text-slate-500",
-  };
-  const label: Record<AssetType, string> = { etf: "ETF", aandeel: "Aandeel", onbekend: "?" };
-  if (editing) {
-    return (
-      <select autoFocus value={type} onBlur={() => setEditing(false)}
-        onChange={(e) => { onUpdate(e.target.value as AssetType); setEditing(false); }}
-        className="text-xs border border-slate-200 rounded px-1 py-0.5 bg-white">
-        <option value="etf">ETF</option>
-        <option value="aandeel">Aandeel</option>
-        <option value="onbekend">Onbekend</option>
-      </select>
-    );
-  }
-  return (
-    <button onClick={() => setEditing(true)} title="Klik om te wijzigen"
-      className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer hover:opacity-80 ${cfg[type]}`}>
-      {label[type]}
-    </button>
-  );
-  void id;
-}
-
-/**
- * Toont een koers-waarschuwing op basis van het `warning`-veld.
- * Formaat "stooq:ticker" = Stooq kon geen koers vinden.
- * Verberg het oranje blok als lastPriceTimestamp < 24u oud is.
- */
 function PriceWarning({ warning, lastPriceTimestamp, degiroWaardeEur }: {
   warning: string | undefined;
-  lastPriceTimestamp: number | null | undefined;
-  degiroWaardeEur: number | null | undefined;
+  lastPriceTimestamp?: number | null;
+  degiroWaardeEur?: number | null;
 }) {
   if (!warning) return null;
-
   const isStooqFail = warning.startsWith("stooq:");
   if (!isStooqFail) {
-    // Generieke waarschuwing (bijv. ISIN-lookup mislukt)
     return (
-      <div className="flex items-start gap-1 text-xs text-amber-600 mt-0.5">
-        <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+      <div className="flex items-start gap-1 text-[10px] text-amber-600 mt-0.5">
+        <AlertTriangle className="w-2.5 h-2.5 mt-0.5 shrink-0" />
         <span>{warning}</span>
       </div>
     );
   }
-
   const triedTicker = warning.slice("stooq:".length);
   const ageMs = lastPriceTimestamp ? Date.now() - lastPriceTimestamp : null;
-  const isRecent = ageMs != null && ageMs < 24 * 3600 * 1000; // < 24 uur
-
-  function ageLabel(ms: number): string {
-    if (ms < 3600000) return `${Math.round(ms / 60000)} min geleden`;
-    if (ms < 86400000) return `${Math.round(ms / 3600000)} uur geleden`;
-    return `${Math.round(ms / 86400000)} dag${ms > 172800000 ? "en" : ""} geleden`;
-  }
-
+  const isRecent = ageMs != null && ageMs < 24 * 3600 * 1000;
   if (isRecent && degiroWaardeEur) {
-    // Subtiele grijze notitie — niet storend
     return (
       <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
         <Info className="w-2.5 h-2.5 shrink-0" />
-        <span>Live koers tijdelijk niet beschikbaar ({triedTicker})</span>
+        <span>Tijdelijk geen live koers ({triedTicker})</span>
       </div>
     );
   }
-
-  // Geen recente koers bekend — toon oranje waarschuwing met context
   return (
-    <div className="flex items-start gap-1 text-xs text-amber-600 mt-0.5">
-      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-      <span>
-        Geen live koers voor <code className="bg-amber-100 px-0.5 rounded text-[10px]">{triedTicker}</code>
-        {!degiroWaardeEur && " — geen fallback beschikbaar"}
-        {ageMs ? ` · Laatste koers ${ageLabel(ageMs)}` : ""}
-      </span>
+    <div className="flex items-start gap-1 text-[10px] text-amber-600 mt-0.5">
+      <AlertTriangle className="w-2.5 h-2.5 mt-0.5 shrink-0" />
+      <span>Geen live koers voor <code className="bg-amber-100 px-0.5 rounded">{triedTicker}</code></span>
     </div>
   );
 }
@@ -152,55 +96,56 @@ function StoplossIndicator({ stoploss, koers, aankoopkoers }: {
   }
   if (!breached && !within5) return null;
   return (
-    <div className={`flex items-center gap-1 text-xs mt-0.5 font-medium ${breached ? "text-red-600" : "text-amber-600"}`}>
-      <ShieldAlert className="w-3 h-3" />{breached ? "Stoploss bereikt!" : "Bijna stoploss"}
+    <div className={`flex items-center gap-1 text-[10px] mt-0.5 font-medium ${breached ? "text-red-600" : "text-amber-600"}`}>
+      <ShieldAlert className="w-2.5 h-2.5" />{breached ? "Stoploss bereikt" : "Bijna stoploss"}
     </div>
   );
 }
 
-// ─── Inline aankoopprijs editor ──────────────────────────────────────────────
+function AssetTypeBadge({ assetType, assetCategorie, id, onUpdate }: {
+  assetType: AssetType; assetCategorie?: AssetCategorie; id: string; onUpdate: (t: AssetType) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const badge = getBadge(assetType, assetCategorie);
+  void id;
+  if (editing) {
+    return (
+      <select autoFocus value={assetType} onBlur={() => setEditing(false)}
+        onChange={(e) => { onUpdate(e.target.value as AssetType); setEditing(false); }}
+        className="text-xs border border-slate-200 rounded px-1 py-0.5 bg-white w-20">
+        <option value="etf">ETF</option>
+        <option value="aandeel">Aandeel</option>
+        <option value="onbekend">Div.</option>
+      </select>
+    );
+  }
+  return (
+    <button onClick={() => setEditing(true)} title="Klik om te wijzigen"
+      className={`text-[10px] px-1.5 py-0.5 rounded font-bold cursor-pointer ${badge.cls}`}>
+      {badge.letter}
+    </button>
+  );
+}
 
-function InlineAankoopEditor({ posId, isin, ticker, huidig, onSave, onCancel }: {
-  posId: string;
-  isin: string;
-  ticker: string;
-  huidig: number | null;
-  onSave: (prijs: number) => void;
-  onCancel: () => void;
+function InlineAankoopEditor({ huidig, onSave, onCancel }: {
+  huidig: number | null; onSave: (p: number) => void; onCancel: () => void;
 }) {
   const [val, setVal] = useState(huidig != null ? String(huidig).replace(".", ",") : "");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
-  void posId; void isin; void ticker;
-
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
   function commit() {
     const n = parseFloat(val.replace(",", "."));
-    if (!isNaN(n) && n > 0) onSave(n);
-    else onCancel();
+    if (!isNaN(n) && n > 0) onSave(n); else onCancel();
   }
-
   return (
-    <div className="flex items-center gap-1">
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="decimal"
-        value={val}
+    <div className="flex items-center gap-1 justify-end">
+      <input ref={ref} type="text" inputMode="decimal" value={val}
         onChange={(e) => setVal(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") onCancel();
-        }}
+        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") onCancel(); }}
         placeholder="0,00"
-        className="w-24 text-right px-2 py-1 border border-blue-400 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      <button onClick={commit} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Opslaan (Enter)">
-        <Check className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={onCancel} className="p-1 text-slate-400 hover:bg-slate-100 rounded" title="Annuleren (Esc)">
-        <X className="w-3.5 h-3.5" />
-      </button>
+        className="w-20 text-right px-1.5 py-0.5 border border-blue-400 rounded text-xs focus:outline-none" />
+      <button onClick={commit} className="p-0.5 text-green-600 hover:bg-green-50 rounded"><Check className="w-3 h-3" /></button>
+      <button onClick={onCancel} className="p-0.5 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3" /></button>
     </div>
   );
 }
@@ -211,30 +156,11 @@ export default function PortfolioOverview() {
   const { activeStocks, activeCrypto, activeMetals, updateStock } = usePortfolio();
   const { userId } = useAuth();
   const [grafiekTicker, setGrafiekTicker] = useState<{ ticker: string; naam: string } | null>(null);
-  const [sortCol, setSortCol] = useState<SortCol>("waarde");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editingId, setEditingId] = useState<string | null>(null);
-  // Per positie: welke valuta wordt getoond — standaard = originele valuta van de positie
-  const [posValuta, setPosValuta] = useState<Record<string, string>>({});
-
-  function handleSort(col: SortCol) {
-    if (col === sortCol) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortCol(col); setSortDir("desc"); }
-  }
-
-  function setDisplayValuta(posId: string, valuta: string) {
-    setPosValuta(prev => ({ ...prev, [posId]: valuta }));
-  }
-
-  function getDisplayValuta(s: { id: string; currency: string }) {
-    return posValuta[s.id] ?? s.currency;
-  }
 
   function handleSaveAankoopkoers(posId: string, isin: string, ticker: string, prijs: number) {
     updateStock(posId, { aankoopkoers: prijs });
-    // Sla op in persistent store (overleeft reimport)
-    const key = isin || ticker;
-    saveAankoopkoers(userId, key, prijs);
+    saveAankoopkoers(userId, isin || ticker, prijs);
     setEditingId(null);
   }
 
@@ -251,30 +177,14 @@ export default function PortfolioOverview() {
     );
   }
 
-  // Enrich stocks with rendement for sorting
-  const enriched = activeStocks.map((s) => ({ ...s, rend: berekenPositieRendement(s) }));
-  const cryptoEnriched = activeCrypto.map((c) => ({ ...c, rend: berekenCryptoRendement(c) }));
+  const totaal = berekenPortfolio(activeStocks, activeCrypto, activeMetals);
 
-  function getValue(s: typeof enriched[0]): number {
-    switch (sortCol) {
-      case "koers": return s.huidigeKoers ?? -Infinity;
-      case "rendementEur": return s.rend.rendementEUR ?? -Infinity;
-      case "rendementPct": return s.rend.rendementPct ?? -Infinity;
-      case "waarde": return s.marktwaarde ?? s.degiroWaardeEur ?? -Infinity;
-      case "naam": return 0; // string sort handled separately
-    }
-  }
-
-  const sortedStocks = [...enriched].sort((a, b) => {
-    if (sortCol === "naam") {
-      const cmp = a.naam.localeCompare(b.naam, "nl");
-      return sortDir === "asc" ? cmp : -cmp;
-    }
-    const av = getValue(a), bv = getValue(b);
-    return sortDir === "asc" ? av - bv : bv - av;
-  });
-
-  const thCls = "px-3 py-3 text-slate-500 font-medium text-left cursor-pointer hover:text-slate-700 select-none whitespace-nowrap text-xs";
+  // ─── Th helper ─────────────────────────────────────────────────────────────
+  const Th = ({ children, right, hide }: { children: React.ReactNode; right?: boolean; hide?: string }) => (
+    <th className={`px-2 py-2.5 text-[11px] font-medium text-slate-400 whitespace-nowrap ${right ? "text-right" : "text-left"} ${hide ?? ""}`}>
+      {children}
+    </th>
+  );
 
   return (
     <>
@@ -284,184 +194,164 @@ export default function PortfolioOverview() {
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-800">Alle posities</h2>
-          <p className="text-xs text-slate-400">{activeStocks.length + activeCrypto.length + activeMetals.length} posities · valuta per positie instelbaar</p>
+          <h2 className="text-base font-semibold text-slate-800">Posities</h2>
+          <p className="text-xs text-slate-400">{activeStocks.length + activeCrypto.length + activeMetals.length} posities</p>
         </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-xs">
+            {/* Kolomhoofden */}
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className={thCls} onClick={() => handleSort("naam")}>
-                  Naam <SortIcon col="naam" activeCol={sortCol} dir={sortDir} />
-                </th>
-                <th className={`${thCls} hidden sm:table-cell`}>Type</th>
-                <th className="px-3 py-3 text-slate-500 font-medium text-right text-xs whitespace-nowrap">Aantal</th>
-                <th className={`${thCls} text-right`} onClick={() => handleSort("koers")}>
-                  Koers <SortIcon col="koers" activeCol={sortCol} dir={sortDir} />
-                </th>
-                <th className={`${thCls} text-right`} onClick={() => handleSort("rendementEur")}>
-                  Rendement <SortIcon col="rendementEur" activeCol={sortCol} dir={sortDir} />
-                </th>
-                <th className={`${thCls} text-right`} onClick={() => handleSort("waarde")}>
-                  Waarde <SortIcon col="waarde" activeCol={sortCol} dir={sortDir} />
-                </th>
-                <th className="px-3 py-3 text-right" />
+                <Th>Naam</Th>
+                <Th hide="hidden sm:table-cell">Type</Th>
+                <Th hide="hidden md:table-cell">Ticker / ISIN</Th>
+                <Th right hide="hidden sm:table-cell">Aantal</Th>
+                <Th right>Koers</Th>
+                <Th right hide="hidden md:table-cell">Valuta</Th>
+                <Th right>Waarde (EUR)</Th>
+                <Th right hide="hidden lg:table-cell">Gm. aank.</Th>
+                <Th right hide="hidden lg:table-cell">Dag</Th>
+                <Th right hide="hidden lg:table-cell">Dag %</Th>
+                <Th right hide="hidden md:table-cell">Rend. EUR</Th>
+                <Th right>Rend. %</Th>
+                <Th hide="hidden md:table-cell">{""}</Th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-100">
-              {/* Stocks */}
-              {sortedStocks.map((s) => {
+              {/* ── Aandelen & ETFs ── */}
+              {activeStocks.map((s) => {
                 const isPending = s.tickerBron === "pending";
-                const isFallback = !s.huidigeKoers && (s.degiroWaardeEur != null || s.degiroKoers != null);
-                const rend = s.rend;
-                const rendPos = rend.rendementEUR != null && rend.rendementEUR >= 0;
+                const rend = berekenPositieRendement(s);
+                const rendPos = (rend.rendementPct ?? 0) >= 0;
+                const currency = s.currency || "EUR";
+                const sym = CURRENCY_SYMBOL[currency] ?? currency;
+                const lokaal = s.lokaleKoers ?? s.huidigeKoers ?? null;
+                const open   = s.openKoers ?? null;
+                const dagLokaal = lokaal != null && open != null && open > 0 ? lokaal - open : null;
+                const dagPct    = dagLokaal != null && open != null && open > 0 ? (dagLokaal / open) * 100 : null;
+                const dagPos    = (dagLokaal ?? 0) >= 0;
+                const isFallback = !s.huidigeKoers && s.degiroWaardeEur != null;
+                const waardeEur = s.marktwaarde ?? s.degiroWaardeEur ?? null;
                 const stoplossBreached = s.stoploss && s.huidigeKoers && s.aankoopkoers
                   && s.huidigeKoers <= s.aankoopkoers * (1 - s.stoploss.waarde / 100);
 
-                // Welke valuta toont deze rij?
-                const gekozenValuta = getDisplayValuta(s);
-                const isLokaal = gekozenValuta !== "EUR" && s.lokaleKoers != null;
-                const sym = CURRENCY_SYMBOL[gekozenValuta] ?? gekozenValuta;
-                // Koers en waarde in de gekozen valuta
-                const toonKoers = isLokaal ? s.lokaleKoers! : (s.huidigeKoers ?? null);
-                const toonWaarde = isLokaal
-                  ? s.lokaleKoers! * s.aantalAandelen
-                  : (s.marktwaarde ?? s.degiroWaardeEur ?? null);
-                const beschikbareValuta = [
-                  ...(s.currency !== "EUR" && s.lokaleKoers != null ? [s.currency] : []),
-                  "EUR",
-                ].filter((v, i, a) => a.indexOf(v) === i);
-
                 return (
                   <tr key={s.id} className={`hover:bg-slate-50 transition-colors ${stoplossBreached ? "bg-red-50" : ""}`}>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-slate-800 text-sm">{s.naam}</span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">{isPending ? s.isin : s.ticker}</div>
-                      <PriceWarning
-                        warning={s.warning}
-                        lastPriceTimestamp={s.lastPriceTimestamp}
-                        degiroWaardeEur={s.degiroWaardeEur}
-                      />
+                    {/* Naam */}
+                    <td className="px-2 py-2.5 min-w-32">
+                      <div className="font-medium text-slate-800 text-xs truncate max-w-40">{s.naam}</div>
+                      <PriceWarning warning={s.warning} lastPriceTimestamp={s.lastPriceTimestamp} degiroWaardeEur={s.degiroWaardeEur} />
                       <StoplossIndicator stoploss={s.stoploss} koers={s.huidigeKoers} aankoopkoers={s.aankoopkoers} />
                     </td>
-                    <td className="px-3 py-3 hidden sm:table-cell">
-                      <AssetTypeBadge type={s.assetType ?? "onbekend"} id={s.id}
+                    {/* Type badge */}
+                    <td className="px-2 py-2.5 hidden sm:table-cell">
+                      <AssetTypeBadge assetType={s.assetType ?? "onbekend"} assetCategorie={s.assetCategorie} id={s.id}
                         onUpdate={(t) => updateStock(s.id, { assetType: t })} />
                     </td>
-                    <td className="px-3 py-3 text-right text-slate-500 text-xs">{s.aantalAandelen.toLocaleString("nl-NL")}</td>
-                    <td className="px-3 py-3 text-right">
-                      {isPending ? (
-                        <span className="flex items-center justify-end gap-1 text-slate-400 text-xs">
-                          <Loader2 className="w-3 h-3 animate-spin" />Opzoeken…
-                        </span>
-                      ) : toonKoers != null ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-slate-700 text-xs font-medium">
-                            {sym} {toonKoers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                          </span>
-                          {/* Valuta-wisselaar chips */}
-                          {beschikbareValuta.length > 1 && (
-                            <div className="flex border border-slate-200 rounded overflow-hidden">
-                              {beschikbareValuta.map((v) => (
-                                <button
-                                  key={v}
-                                  onClick={() => setDisplayValuta(s.id, v)}
-                                  className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                                    gekozenValuta === v
-                                      ? "bg-blue-600 text-white"
-                                      : "text-slate-400 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {CURRENCY_SYMBOL[v] ?? v} {v}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ) : s.degiroKoers != null ? (
-                        <span className="text-amber-600 flex items-center justify-end gap-1 text-xs">
-                          <Clock className="w-3 h-3" />
-                          {s.degiroKoers.toLocaleString("nl-NL", { minimumFractionDigits: 2 })} {s.currency}
-                        </span>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    {/* Ticker / ISIN */}
+                    <td className="px-2 py-2.5 hidden md:table-cell">
+                      <div className="text-slate-500 font-mono text-[10px]">{isPending ? "…" : (s.effectieveTicker ?? s.ticker)}</div>
+                      {s.isin && <div className="text-slate-300 text-[10px]">{s.isin}</div>}
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      {editingId === s.id ? (
-                        /* Inline editor actief */
-                        <div className="flex justify-end">
-                          <InlineAankoopEditor
-                            posId={s.id}
-                            isin={s.isin}
-                            ticker={s.ticker}
-                            huidig={s.aankoopkoers}
-                            onSave={(p) => handleSaveAankoopkoers(s.id, s.isin, s.ticker, p)}
-                            onCancel={() => setEditingId(null)}
-                          />
+                    {/* Aantal */}
+                    <td className="px-2 py-2.5 text-right text-slate-500 hidden sm:table-cell">
+                      {s.aantalAandelen.toLocaleString("nl-NL")}
+                    </td>
+                    {/* Koers */}
+                    <td className="px-2 py-2.5 text-right font-medium text-slate-700">
+                      {isPending ? (
+                        <span className="flex items-center justify-end gap-1 text-slate-300">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        </span>
+                      ) : lokaal != null ? (
+                        <span>{sym} {lokaal.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                      ) : s.degiroKoers != null ? (
+                        <span className="text-amber-500 flex items-center justify-end gap-0.5">
+                          <Clock className="w-3 h-3" />
+                          {sym} {s.degiroKoers.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Valuta */}
+                    <td className="px-2 py-2.5 text-right text-slate-400 hidden md:table-cell">
+                      {currency}
+                    </td>
+                    {/* Waarde EUR */}
+                    <td className="px-2 py-2.5 text-right font-semibold text-slate-800">
+                      {waardeEur != null ? (
+                        <div>
+                          <div>€ {fEur(waardeEur)}</div>
+                          {isFallback && <div className="text-[9px] text-amber-400 font-normal">DEGIRO koers</div>}
                         </div>
-                      ) : rend.rendementEUR != null && rend.rendementPct != null ? (
-                        /* Rendement bekend — toon met potlood-knop */
-                        <div className="flex items-center justify-end gap-1 group">
-                          <div className="text-right">
-                            <div className={`flex items-center justify-end gap-1 text-xs font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
-                              {rendPos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                              {fEurTeken(rend.rendementEUR)}
-                            </div>
-                            <div className={`text-xs ${rendPos ? "text-green-500" : "text-red-500"}`}>
-                              {fPct(rend.rendementPct)}
-                            </div>
-                            <div className="text-[10px] text-slate-300">
-                              {/* aankoopkoers altijd in lokale valuta */}
-                              gk: {CURRENCY_SYMBOL[s.currency] ?? s.currency} {s.aankoopkoers!.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setEditingId(s.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded"
-                            title="Aankoopprijs aanpassen"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Gem. aankoopprijs */}
+                    <td className="px-2 py-2.5 text-right hidden lg:table-cell">
+                      {editingId === s.id ? (
+                        <InlineAankoopEditor huidig={s.aankoopkoers}
+                          onSave={(p) => handleSaveAankoopkoers(s.id, s.isin, s.ticker, p)}
+                          onCancel={() => setEditingId(null)} />
+                      ) : s.aankoopkoers != null ? (
+                        <button onClick={() => setEditingId(s.id)}
+                          className="group flex items-center justify-end gap-1 text-slate-500 hover:text-blue-600 w-full">
+                          <span>{sym} {s.aankoopkoers.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}</span>
+                          <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
+                        </button>
+                      ) : (
+                        <button onClick={() => setEditingId(s.id)}
+                          className="flex items-center justify-end gap-1 text-slate-300 hover:text-blue-500 w-full">
+                          <Pencil className="w-2.5 h-2.5" /><span>Invoeren</span>
+                        </button>
+                      )}
+                    </td>
+                    {/* Dagverandering */}
+                    <td className="px-2 py-2.5 text-right hidden lg:table-cell">
+                      {dagLokaal != null ? (
+                        <span className={dagPos ? "text-green-600" : "text-red-600"}>
+                          {dagPos ? "+" : ""}{sym} {Math.abs(dagLokaal).toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Dag % */}
+                    <td className="px-2 py-2.5 text-right hidden lg:table-cell">
+                      {dagPct != null ? (
+                        <span className={`font-medium ${dagPos ? "text-green-600" : "text-red-600"}`}>
+                          {dagPos ? "+" : ""}{dagPct.toFixed(2)}%
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Rendement EUR */}
+                    <td className="px-2 py-2.5 text-right hidden md:table-cell">
+                      {rend.rendementEUR != null ? (
+                        <span className={`font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
+                          {fEurTeken(rend.rendementEUR)}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Rendement % */}
+                    <td className="px-2 py-2.5 text-right">
+                      {rend.rendementPct != null ? (
+                        <div>
+                          <span className={`font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
+                            {rendPos ? <TrendingUp className="w-3 h-3 inline mr-0.5" /> : <TrendingDown className="w-3 h-3 inline mr-0.5" />}
+                            {fPct(rend.rendementPct)}
+                          </span>
                         </div>
                       ) : (
-                        /* Geen aankoopkoers — toon uitnodiging */
-                        <button
-                          onClick={() => setEditingId(s.id)}
-                          className="flex items-center justify-end gap-1.5 text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg w-full transition-colors"
-                          title="Aankoopprijs invoeren"
-                        >
-                          <Pencil className="w-3 h-3" />
-                          <span>Aankoopprijs</span>
+                        <button onClick={() => setEditingId(s.id)}
+                          className="text-slate-300 hover:text-blue-500 flex items-center justify-end gap-0.5 w-full">
+                          <Pencil className="w-2.5 h-2.5" />
                         </button>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      {toonWaarde != null ? (
-                        <div>
-                          <span className="font-semibold text-slate-800 text-sm">
-                            {sym} {toonWaarde.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
-                          </span>
-                          {/* Toon EUR-equivalent als we in lokale modus zijn */}
-                          {isLokaal && s.marktwaarde != null && (
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              ≈ € {fEur(s.marktwaarde)}
-                            </div>
-                          )}
-                          {isFallback && !isPending && !isLokaal && (
-                            <div className="flex items-center justify-end gap-1 text-[10px] text-amber-500 mt-0.5">
-                              <Clock className="w-2.5 h-2.5" />DEGIRO slotkoers
-                            </div>
-                          )}
-                        </div>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-3 py-3 text-right">
+                    {/* Grafiek */}
+                    <td className="px-2 py-2.5 hidden md:table-cell">
                       {!isPending && s.ticker && (
                         <button onClick={() => setGrafiekTicker({ ticker: s.ticker, naam: s.naam })}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Koersgeschiedenis">
-                          <BarChart2 className="w-4 h-4" />
+                          className="p-1 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                          <BarChart2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </td>
@@ -469,66 +359,121 @@ export default function PortfolioOverview() {
                 );
               })}
 
-              {/* Crypto */}
-              {cryptoEnriched.map((c) => {
-                const rend = c.rend;
-                const rendPos = rend.rendementEUR != null && rend.rendementEUR >= 0;
+              {/* ── Crypto ── */}
+              {activeCrypto.map((c) => {
+                const rend = berekenCryptoRendement(c);
+                const rendPos = (rend.rendementPct ?? 0) >= 0;
                 return (
                   <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-3 py-3">
-                      <div className="font-medium text-slate-800 text-sm">{c.naam}</div>
-                      <div className="text-xs text-slate-400">{c.coinGeckoId}</div>
+                    <td className="px-2 py-2.5">
+                      <div className="font-medium text-slate-800 text-xs">{c.naam}</div>
                     </td>
-                    <td className="px-3 py-3 hidden sm:table-cell">
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">Crypto</span>
+                    <td className="px-2 py-2.5 hidden sm:table-cell">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${TYPE_BADGE.crypto.cls}`}>C</span>
                     </td>
-                    <td className="px-3 py-3 text-right text-xs text-slate-500">
+                    <td className="px-2 py-2.5 hidden md:table-cell">
+                      <div className="text-slate-400 font-mono text-[10px]">{c.coinGeckoId}</div>
+                    </td>
+                    <td className="px-2 py-2.5 text-right text-slate-500 hidden sm:table-cell">
                       {c.aantalCoins.toLocaleString("nl-NL", { maximumFractionDigits: 8 })}
                     </td>
-                    <td className="px-3 py-3 text-right text-xs text-slate-700">
-                      {c.huidigeKoers != null ? `€ ${fEur(c.huidigeKoers, 4)}` : "—"}
+                    <td className="px-2 py-2.5 text-right font-medium text-slate-700">
+                      {c.huidigeKoers != null ? fmt(c.huidigeKoers, "EUR", 4) : "—"}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-2 py-2.5 text-right text-slate-400 hidden md:table-cell">EUR</td>
+                    <td className="px-2 py-2.5 text-right font-semibold text-slate-800">
+                      {c.marktwaarde != null ? `€ ${fEur(c.marktwaarde)}` : "—"}
+                    </td>
+                    <td className="px-2 py-2.5 text-right hidden lg:table-cell text-slate-500">
+                      {c.aankoopkoers != null ? fmt(c.aankoopkoers, "EUR") : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-2 py-2.5 hidden lg:table-cell" />
+                    <td className="px-2 py-2.5 hidden lg:table-cell" />
+                    <td className="px-2 py-2.5 text-right hidden md:table-cell">
                       {rend.rendementEUR != null ? (
-                        <div>
-                          <div className={`text-xs font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
-                            {fEurTeken(rend.rendementEUR)}
-                          </div>
-                          <div className={`text-xs ${rendPos ? "text-green-500" : "text-red-500"}`}>
-                            {fPct(rend.rendementPct!)}
-                          </div>
-                        </div>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
+                        <span className={`font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
+                          {fEurTeken(rend.rendementEUR)}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold text-slate-800 text-sm">
-                      {c.marktwaarde != null ? `€ ${fEur(c.marktwaarde)}` : "—"}
+                    <td className="px-2 py-2.5 text-right">
+                      {rend.rendementPct != null ? (
+                        <span className={`font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
+                          {fPct(rend.rendementPct)}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3" />
+                    <td className="px-2 py-2.5 hidden md:table-cell" />
                   </tr>
                 );
               })}
 
-              {/* Metals */}
+              {/* ── Edelmetalen ── */}
               {activeMetals.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-3">
-                    <div className="font-medium text-slate-800 text-sm">{METAL_LABELS[m.type]}</div>
-                    <div className="text-xs text-slate-400">{m.grammen} g</div>
+                  <td className="px-2 py-2.5">
+                    <div className="font-medium text-slate-800 text-xs">{METAL_LABELS[m.type]}</div>
+                    <div className="text-[10px] text-slate-400">{m.grammen} gram</div>
                   </td>
-                  <td className="px-3 py-3 hidden sm:table-cell">
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">Metaal</span>
+                  <td className="px-2 py-2.5 hidden sm:table-cell">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${TYPE_BADGE.metaal.cls}`}>M</span>
                   </td>
-                  <td className="px-3 py-3 text-right text-xs text-slate-500">{m.grammen} g</td>
-                  <td className="px-3 py-3 text-right text-xs text-slate-700">
-                    {m.prijsPerGram != null ? `€ ${fEur(m.prijsPerGram, 3)}/g` : "—"}
+                  <td className="px-2 py-2.5 hidden md:table-cell text-[10px] text-slate-400 font-mono">
+                    {m.type === "goud" ? "xaueur" : m.type === "zilver" ? "xageur" : m.type}
                   </td>
-                  <td className="px-3 py-3 text-right"><span className="text-slate-300 text-xs">—</span></td>
-                  <td className="px-3 py-3 text-right font-semibold text-slate-800 text-sm">
-                    {m.marktwaarde != null ? `€ ${fEur(m.marktwaarde)}` : "—"}
+                  <td className="px-2 py-2.5 text-right text-slate-500 hidden sm:table-cell">{m.grammen} g</td>
+                  <td className="px-2 py-2.5 text-right font-medium text-slate-700">
+                    {m.prijsPerGram != null ? `€ ${m.prijsPerGram.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}/g` : "—"}
                   </td>
-                  <td className="px-3 py-3" />
+                  <td className="px-2 py-2.5 text-right text-slate-400 hidden md:table-cell">EUR</td>
+                  <td className="px-2 py-2.5 text-right font-semibold text-slate-800">
+                    {m.marktwaarde != null ? `€ ${fEur(m.marktwaarde)}` : "—"}
+                  </td>
+                  <td className="px-2 py-2.5 hidden lg:table-cell" />
+                  <td className="px-2 py-2.5 hidden lg:table-cell" />
+                  <td className="px-2 py-2.5 hidden lg:table-cell" />
+                  <td className="px-2 py-2.5 hidden md:table-cell" />
+                  <td className="px-2 py-2.5 text-slate-300">—</td>
+                  <td className="px-2 py-2.5 hidden md:table-cell" />
                 </tr>
               ))}
+
+              {/* ── Totaalrij ── */}
+              <tr className="bg-slate-50 border-t-2 border-slate-200 font-semibold">
+                <td className="px-2 py-3 text-slate-700 text-xs">Totaal</td>
+                <td className="hidden sm:table-cell" />
+                <td className="hidden md:table-cell" />
+                <td className="hidden sm:table-cell" />
+                <td className="hidden md:table-cell" />
+                <td className="hidden md:table-cell" />
+                {/* Totale waarde EUR */}
+                <td className="px-2 py-3 text-right text-slate-800">
+                  € {fEur(totaal.totaalWaarde)}
+                </td>
+                {/* Totaal geïnvesteerd */}
+                <td className="px-2 py-3 text-right text-slate-600 hidden lg:table-cell">
+                  {totaal.totaalGeïnvesteerd > 0 ? `€ ${fEur(totaal.totaalGeïnvesteerd)}` : "—"}
+                </td>
+                <td className="hidden lg:table-cell" />
+                <td className="hidden lg:table-cell" />
+                {/* Totaal rendement EUR */}
+                <td className="px-2 py-3 text-right hidden md:table-cell">
+                  {totaal.totaalGeïnvesteerd > 0 && (
+                    <span className={totaal.rendementEUR >= 0 ? "text-green-600" : "text-red-600"}>
+                      {fEurTeken(totaal.rendementEUR)}
+                    </span>
+                  )}
+                </td>
+                {/* Totaal rendement % */}
+                <td className="px-2 py-3 text-right">
+                  {totaal.totaalGeïnvesteerd > 0 && (
+                    <span className={`font-bold ${totaal.rendementPct >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {fPct(totaal.rendementPct)}
+                    </span>
+                  )}
+                </td>
+                <td className="hidden md:table-cell" />
+              </tr>
             </tbody>
           </table>
         </div>

@@ -238,7 +238,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         updates.push(
           fetch(`/api/quotes?tickers=${params.join(",")}`)
             .then((r) => r.json())
-            .then((data: Record<string, { priceEur: number; pricOriginal: number; currency: string; usedTicker?: string; error?: string }>) => {
+            .then((data: Record<string, { priceEur: number; pricOriginal: number; openOriginal: number | null; currency: string; usedTicker?: string; error?: string }>) => {
               const now = Date.now();
               setStocksState((prev) => prev.map((s) => {
                 if (s.tickerBron === "pending" || s.tickerBron === "onbekend") return s;
@@ -258,6 +258,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
                   huidigeKoers: entry.priceEur,
                   huidigeKoersValuta: "EUR",
                   lokaleKoers: entry.pricOriginal ?? entry.priceEur,
+                  openKoers: entry.openOriginal ?? null,
                   currency: entry.currency ?? s.currency,
                   marktwaarde: entry.priceEur * s.aantalAandelen,
                   lastPriceTimestamp: now,
