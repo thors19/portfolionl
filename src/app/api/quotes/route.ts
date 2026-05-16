@@ -103,6 +103,31 @@ async function fetchStooqWithFallback(ticker: string): Promise<StooqResult | nul
   return null;
 }
 
+// Leid de valuta af uit het Stooq ticker-suffix (authoritative)
+function currencyFromStooqTicker(ticker: string): string {
+  const lower = ticker.toLowerCase();
+  // FX en edelmetalen-tickers
+  if (lower.startsWith("xau") || lower.startsWith("xag") || lower.startsWith("xpt") || lower.startsWith("xpd") || lower.startsWith("hg")) {
+    return lower.includes("eur") ? "EUR" : "USD";
+  }
+  const map: Record<string, string> = {
+    ".nl": "EUR", ".de": "EUR", ".fr": "EUR", ".it": "EUR", ".es": "EUR",
+    ".be": "EUR", ".fi": "EUR", ".at": "EUR", ".pt": "EUR",
+    ".uk": "GBP",
+    ".us": "USD",
+    ".ca": "CAD",
+    ".sw": "SEK",
+    ".dk": "DKK",
+    ".no": "NOK",
+    ".ch": "CHF",
+    ".jp": "JPY",
+    ".au": "AUD",
+    ".hk": "HKD",
+  };
+  const suffix = lower.match(/\.[a-z]+$/)?.[0];
+  return suffix ? (map[suffix] ?? "EUR") : "USD"; // bare tickers zijn vrijwel altijd US
+}
+
 // GET /api/quotes?tickers=asml.nl:EUR,msft.us:USD,...
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -113,7 +138,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Geen tickers opgegeven" }, { status: 400 });
 
   const requests = rawEntries.map((entry) => {
-    const [ticker, currency = "EUR"] = entry.split(":");
+    const [ticker, requestedCurrency = "EUR"] = entry.split(":");
+    // Ticker-suffix is authoritatief — overschrijft de aangevraagde valuta
+    const currency = currencyFromStooqTicker(ticker) ?? requestedCurrency;
     return { ticker, currency };
   });
 

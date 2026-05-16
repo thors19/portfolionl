@@ -98,8 +98,33 @@ function save(key: string | null, data: object) {
   try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
 }
 
+// Leid de valuta af uit het Stooq-ticker-suffix (meest betrouwbaar)
+function currencyFromTicker(ticker: string): string | null {
+  const suffix = ticker.toLowerCase().match(/\.[a-z]+$/)?.[0];
+  const map: Record<string, string> = {
+    ".nl": "EUR", ".de": "EUR", ".fr": "EUR", ".it": "EUR", ".es": "EUR",
+    ".be": "EUR", ".fi": "EUR", ".at": "EUR", ".pt": "EUR",
+    ".uk": "GBP",
+    ".us": "USD",
+    ".ca": "CAD",
+    ".sw": "SEK",
+    ".dk": "DKK",
+    ".no": "NOK",
+    ".ch": "CHF",
+    ".jp": "JPY",
+    ".au": "AUD",
+    ".hk": "HKD",
+  };
+  return suffix ? (map[suffix] ?? null) : null;
+}
+
 function buildStooqParam(s: StockPosition): string {
-  return `${s.ticker}:${getExchangeCurrency(s.exchange)}`;
+  // Prioriteit: ticker-suffix (meest betrouwbaar) > CSV-valuta > exchange-code fallback
+  const currency =
+    currencyFromTicker(s.ticker) ??
+    (s.currency && s.currency !== "" ? s.currency : null) ??
+    getExchangeCurrency(s.exchange);
+  return `${s.ticker}:${currency}`;
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
