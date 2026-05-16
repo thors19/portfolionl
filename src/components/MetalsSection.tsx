@@ -51,6 +51,8 @@ export default function MetalsSection() {
 
       addMetal({
         id: uuidv4(),
+        portfolioId: "default",
+        broker: "Handmatig",
         type,
         grammen: g,
         prijsPerGram: pricePerGram,

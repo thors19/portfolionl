@@ -55,11 +55,14 @@ export default function CryptoSection() {
 
       addCrypto({
         id: uuidv4(),
+        portfolioId: "default",
+        broker: "Handmatig",
         naam: selected.naam,
         coinGeckoId: selected.id,
         aantalCoins: aantal,
         huidigeKoers: price,
         marktwaarde: price != null ? price * aantal : null,
+        aankoopkoers: null,
       });
 
       setQuery("");

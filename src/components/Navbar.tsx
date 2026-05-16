@@ -8,12 +8,15 @@ import { TrendingUp, Settings, BarChart2, Calculator, PiggyBank, BookOpen, LogIn
 
 const ADMIN_USER_ID = process.env.NEXT_PUBLIC_ADMIN_USER_ID;
 
+import { Layers } from "lucide-react";
+
 const appNavItems = [
-  { href: "/dashboard", label: "Dashboard",  icon: TrendingUp },
-  { href: "/beheer",    label: "Beheer",     icon: Settings },
-  { href: "/dividend",  label: "Dividend",   icon: BarChart2 },
-  { href: "/box3",      label: "Box 3",      icon: Calculator },
-  { href: "/simulator", label: "Simulator",  icon: PiggyBank },
+  { href: "/dashboard", label: "Dashboard",   icon: TrendingUp },
+  { href: "/brokers",   label: "Brokers",     icon: Layers },
+  { href: "/beheer",    label: "Beheer",      icon: Settings },
+  { href: "/dividend",  label: "Dividend",    icon: BarChart2 },
+  { href: "/box3",      label: "Box 3",       icon: Calculator },
+  { href: "/simulator", label: "Simulator",   icon: PiggyBank },
 ];
 
 export default function Navbar() {

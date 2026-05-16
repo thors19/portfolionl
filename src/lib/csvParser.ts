@@ -155,6 +155,8 @@ export function parsePortfolioCSV(raw: string): StockPosition[] {
 
     positions.push({
       id: uuidv4(),
+      portfolioId: "default",
+      broker: "DEGIRO",
       naam,
       ticker: stooqTicker,
       isin,
@@ -168,6 +170,7 @@ export function parsePortfolioCSV(raw: string): StockPosition[] {
       degiroWaardeEur: waardeEur && waardeEur > 0 ? waardeEur : null,
       tickerBron,
       assetType: detectAssetType(naam),
+      assetCategorie: "onbekend",
       aankoopkoers: aankoopkoers && aankoopkoers > 0 ? aankoopkoers : null,
       aankoopdatum: null,
       stoploss: null,
