@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { SignInButton, UserButton } from "@clerk/nextjs";
-import { TrendingUp, Settings, BarChart2, Calculator, PiggyBank, BookOpen, LogIn } from "lucide-react";
+import { TrendingUp, Settings, BarChart2, Calculator, PiggyBank, BookOpen, LogIn, ShieldCheck } from "lucide-react";
+
+const ADMIN_USER_ID = process.env.NEXT_PUBLIC_ADMIN_USER_ID;
 
 const appNavItems = [
   { href: "/dashboard", label: "Dashboard",  icon: TrendingUp },
@@ -16,7 +18,7 @@ const appNavItems = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isSignedIn, isLoaded, userId } = useAuth();
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -48,6 +50,21 @@ export default function Navbar() {
                 </Link>
               );
             })}
+
+            {/* Admin link — only for admin user */}
+            {isLoaded && isSignedIn && ADMIN_USER_ID && userId === ADMIN_USER_ID && (
+              <Link
+                href="/admin/blog"
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  pathname.startsWith("/admin")
+                    ? "bg-purple-600 text-white"
+                    : "text-purple-600 hover:bg-purple-50"
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span className="hidden md:inline">Admin</span>
+              </Link>
+            )}
 
             {/* Blog — always visible */}
             <Link

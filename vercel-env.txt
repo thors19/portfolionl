@@ -1,0 +1,10 @@
+# PortfolioNL — Vercel Environment Variables
+# Kopieer elke regel naar Vercel → Settings → Environment Variables
+# Gebruik je PRODUCTION keys (pk_live_ / sk_live_) van dashboard.clerk.com
+
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_VUL_HIER_IN
+CLERK_SECRET_KEY=sk_live_VUL_HIER_IN
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard
+NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/onboarding
