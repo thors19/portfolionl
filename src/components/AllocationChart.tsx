@@ -2,26 +2,64 @@
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { usePortfolio } from "@/lib/portfolioContext";
+import { StockPosition, CryptoPosition } from "@/lib/types";
 
-const COLORS = [
-  "#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed",
-  "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4338ca",
-];
+// Kleuren passend bij de type-badges in PortfolioOverview
+const COLORS: Record<string, string> = {
+  "ETF":       "#2563eb",  // blue-600  — badge E
+  "Aandelen":  "#16a34a",  // green-600 — badge A
+  "Bitcoin":   "#f97316",  // orange-500 — bitcoin oranje
+  "Crypto":    "#7c3aed",  // violet-600 — badge C
+  "Goud":      "#d97706",  // amber-600 — badge M
+  "Zilver":    "#94a3b8",  // slate-400
+  "Platina":   "#6366f1",  // indigo-500
+  "Palladium": "#14b8a6",  // teal-500
+  "Koper":     "#ea580c",  // orange-600
+  "Overig":    "#cbd5e1",  // slate-300 — badge D
+};
+
+const METAL_LABEL: Record<string, string> = {
+  goud: "Goud", zilver: "Zilver", platina: "Platina",
+  palladium: "Palladium", koper: "Koper",
+};
+
+function isEtf(s: StockPosition) {
+  return s.assetType === "etf" || s.assetCategorie === "etf";
+}
+function isAandeel(s: StockPosition) {
+  return !isEtf(s) && (s.assetType === "aandeel" || s.assetCategorie === "aandeel");
+}
+function isBitcoin(c: CryptoPosition) {
+  return c.coinGeckoId === "bitcoin"
+    || c.naam.toLowerCase() === "bitcoin"
+    || c.naam.toLowerCase() === "btc";
+}
 
 export default function AllocationChart() {
   const { stocks, crypto, metals } = usePortfolio();
 
-  const totalStocks = stocks.reduce((s, p) => s + (p.marktwaarde ?? 0), 0);
-  const totalCrypto = crypto.reduce((s, p) => s + (p.marktwaarde ?? 0), 0);
-  const totalGoud = metals.filter((m) => m.type === "goud").reduce((s, m) => s + (m.marktwaarde ?? 0), 0);
-  const totalZilver = metals.filter((m) => m.type === "zilver").reduce((s, m) => s + (m.marktwaarde ?? 0), 0);
+  const etfWaarde     = stocks.filter(isEtf).reduce((s, p) => s + (p.marktwaarde ?? 0), 0);
+  const aandeelWaarde = stocks.filter(isAandeel).reduce((s, p) => s + (p.marktwaarde ?? 0), 0);
+  const overigWaarde  = stocks.filter(s => !isEtf(s) && !isAandeel(s)).reduce((s, p) => s + (p.marktwaarde ?? 0), 0);
+  const bitcoinWaarde = crypto.filter(isBitcoin).reduce((s, c) => s + (c.marktwaarde ?? 0), 0);
+  const cryptoWaarde  = crypto.filter(c => !isBitcoin(c)).reduce((s, c) => s + (c.marktwaarde ?? 0), 0);
 
-  const data = [
-    totalStocks > 0 && { name: "Aandelen / ETF", value: totalStocks },
-    totalCrypto > 0 && { name: "Crypto", value: totalCrypto },
-    totalGoud > 0 && { name: "Goud", value: totalGoud },
-    totalZilver > 0 && { name: "Zilver", value: totalZilver },
-  ].filter(Boolean) as { name: string; value: number }[];
+  const metalGroups: Record<string, number> = {};
+  for (const m of metals) {
+    const label = METAL_LABEL[m.type] ?? m.type;
+    metalGroups[label] = (metalGroups[label] ?? 0) + (m.marktwaarde ?? 0);
+  }
+
+  const data: { name: string; value: number; color: string }[] = [
+    etfWaarde     > 0 && { name: "ETF",      value: etfWaarde,     color: COLORS["ETF"] },
+    aandeelWaarde > 0 && { name: "Aandelen", value: aandeelWaarde, color: COLORS["Aandelen"] },
+    overigWaarde  > 0 && { name: "Overig",   value: overigWaarde,  color: COLORS["Overig"] },
+    bitcoinWaarde > 0 && { name: "Bitcoin",  value: bitcoinWaarde, color: COLORS["Bitcoin"] },
+    cryptoWaarde  > 0 && { name: "Crypto",   value: cryptoWaarde,  color: COLORS["Crypto"] },
+    ...Object.entries(metalGroups)
+      .filter(([, v]) => v > 0)
+      .map(([name, value]) => ({ name, value, color: COLORS[name] ?? COLORS["Goud"] })),
+  ].filter(Boolean) as { name: string; value: number; color: string }[];
 
   const total = data.reduce((s, d) => s + d.value, 0);
 
@@ -47,8 +85,8 @@ export default function AllocationChart() {
             paddingAngle={3}
             dataKey="value"
           >
-            {data.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+            {data.map((d, i) => (
+              <Cell key={i} fill={d.color} />
             ))}
           </Pie>
           <Tooltip
@@ -61,10 +99,10 @@ export default function AllocationChart() {
         </PieChart>
       </ResponsiveContainer>
       <div className="mt-3 space-y-1">
-        {data.map((d, i) => (
+        {data.map((d) => (
           <div key={d.name} className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+              <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: d.color }} />
               <span className="text-slate-600">{d.name}</span>
             </div>
             <span className="text-slate-500 font-medium">
