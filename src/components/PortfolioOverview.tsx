@@ -153,10 +153,11 @@ function InlineAankoopEditor({ huidig, onSave, onCancel }: {
 // ─── Hoofd component ──────────────────────────────────────────────────────────
 
 export default function PortfolioOverview() {
-  const { activeStocks, activeCrypto, activeMetals, updateStock, removeStock, removeCrypto, removeMetal } = usePortfolio();
+  const { activeStocks, activeCrypto, activeMetals, updateStock, removeStock, updateCrypto, removeCrypto, removeMetal } = usePortfolio();
   const { userId } = useAuth();
   const [grafiekTicker, setGrafiekTicker] = useState<{ ticker: string; naam: string } | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);      // aankoopkoers
+  const [editingId, setEditingId] = useState<string | null>(null);       // stock aankoopkoers
+  const [editingCryptoAkId, setEditingCryptoAkId] = useState<string | null>(null); // crypto aankoopkoers
   const [editAantalId, setEditAantalId] = useState<string | null>(null); // aantal
   const [aantalDraft, setAantalDraft] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -434,8 +435,33 @@ export default function PortfolioOverview() {
                     <td className="px-2 py-2.5 text-right font-semibold text-slate-800">
                       {c.marktwaarde != null ? `€ ${fEur(c.marktwaarde)}` : "—"}
                     </td>
-                    <td className="px-2 py-2.5 text-right hidden lg:table-cell text-slate-500">
-                      {c.aankoopkoers != null ? fmt(c.aankoopkoers, "EUR") : <span className="text-slate-300">—</span>}
+                    {/* Gem. aankoopprijs crypto — inline bewerkbaar */}
+                    <td className="px-2 py-2.5 text-right hidden lg:table-cell">
+                      {editingCryptoAkId === c.id ? (
+                        <InlineAankoopEditor
+                          huidig={c.aankoopkoers}
+                          onSave={(p) => {
+                            updateCrypto(c.id, {
+                              aankoopkoers: p,
+                              marktwaarde: c.huidigeKoers != null ? c.huidigeKoers * c.aantalCoins : c.marktwaarde,
+                            });
+                            saveAankoopkoers(userId, c.coinGeckoId, p);
+                            setEditingCryptoAkId(null);
+                          }}
+                          onCancel={() => setEditingCryptoAkId(null)}
+                        />
+                      ) : c.aankoopkoers != null ? (
+                        <button onClick={() => setEditingCryptoAkId(c.id)}
+                          className="group flex items-center justify-end gap-1 text-slate-500 hover:text-blue-600 w-full">
+                          <span>{fmt(c.aankoopkoers, "EUR")}</span>
+                          <Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100" />
+                        </button>
+                      ) : (
+                        <button onClick={() => setEditingCryptoAkId(c.id)}
+                          className="flex items-center justify-end gap-1 text-slate-300 hover:text-blue-500 w-full">
+                          <Pencil className="w-2.5 h-2.5" /><span className="text-[10px]">Invoeren</span>
+                        </button>
+                      )}
                     </td>
                     <td className="px-2 py-2.5 hidden lg:table-cell" />
                     <td className="px-2 py-2.5 hidden lg:table-cell" />

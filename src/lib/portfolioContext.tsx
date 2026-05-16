@@ -65,6 +65,7 @@ interface PortfolioContextType {
   removeStock: (id: string) => void;
   addCrypto: (c: CryptoPosition) => void;
   removeCrypto: (id: string) => void;
+  updateCrypto: (id: string, patch: Partial<CryptoPosition>) => void;
   updateCryptoAmount: (id: string, amount: number) => void;
   addMetal: (m: MetalPosition) => void;
   removeMetal: (id: string) => void;
@@ -372,6 +373,8 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   const addCrypto = useCallback((c: CryptoPosition) => setCryptoState((prev) => [...prev.filter((p) => !(p.coinGeckoId === c.coinGeckoId && p.portfolioId === c.portfolioId)), c]), []);
   const removeCrypto = useCallback((id: string) => setCryptoState((p) => p.filter((c) => c.id !== id)), []);
+  const updateCrypto = useCallback((id: string, patch: Partial<CryptoPosition>) =>
+    setCryptoState((p) => p.map((c) => c.id === id ? { ...c, ...patch } : c)), []);
   const updateCryptoAmount = useCallback((id: string, aantalCoins: number) =>
     setCryptoState((p) => p.map((c) => c.id === id ? { ...c, aantalCoins, marktwaarde: c.huidigeKoers != null ? c.huidigeKoers * aantalCoins : null } : c)), []);
 
@@ -403,7 +406,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       activeStocks, activeCrypto, activeMetals,
       addPortfolio, updatePortfolio, deletePortfolio, setActivePortfolio,
       setStocks, updateStock, removeStock,
-      addCrypto, removeCrypto, updateCryptoAmount,
+      addCrypto, removeCrypto, updateCrypto, updateCryptoAmount,
       addMetal, removeMetal, updateMetalAmount,
       setDividends, setDoelgewicht, refreshPrices,
       clearPortfolio, clearAll,
