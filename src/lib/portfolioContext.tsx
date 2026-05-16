@@ -8,6 +8,8 @@ import {
 } from "./types";
 import { getExchangeCurrency } from "./exchangeMap";
 import { v4 as uuidv4 } from "uuid";
+import { saveSnapshot } from "./snapshots";
+import { berekenPortfolio } from "./rendement";
 
 // ─── Constanten ───────────────────────────────────────────────────────────────
 
@@ -258,6 +260,30 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
       await Promise.all(updates);
       setLastUpdated(new Date().toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }));
+
+      // Bewaar dagelijkse snapshot na prijsupdate
+      if (userId) {
+        // Gebruik state-waarden na updates — setTimeout laat React state settlen
+        setTimeout(() => {
+          setStocksState((latestStocks) => {
+            setCryptoState((latestCrypto) => {
+              setMetalsState((latestMetals) => {
+                const berekening = berekenPortfolio(latestStocks, latestCrypto, latestMetals);
+                saveSnapshot(userId, {
+                  datum: new Date().toISOString().slice(0, 10),
+                  totaalWaarde: berekening.totaalWaarde,
+                  totaalGeïnvesteerd: berekening.totaalGeïnvesteerd,
+                  rendementEUR: berekening.rendementEUR,
+                  rendementPct: berekening.rendementPct,
+                });
+                return latestMetals;
+              });
+              return latestCrypto;
+            });
+            return latestStocks;
+          });
+        }, 500);
+      }
     } finally {
       setIsLoading(false);
     }
