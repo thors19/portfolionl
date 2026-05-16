@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Info } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
+import { usePortfolio } from "@/lib/portfolioContext";
 
 // Box 3 tarieven 2025 (forfaitair stelsel)
 const HEFFINGVRIJ_2025 = 57000;
@@ -56,11 +57,20 @@ function berekenBox3(
 }
 
 export default function Box3Calculator() {
+  const { stocks, crypto, metals } = usePortfolio();
+
+  const portfolioWaarde = Math.round(
+    stocks.reduce((s, p) => s + (p.marktwaarde ?? 0), 0) +
+    crypto.reduce((s, p) => s + (p.marktwaarde ?? 0), 0) +
+    metals.reduce((s, p) => s + (p.marktwaarde ?? 0), 0)
+  );
+
   const [banktegoeden, setBanktegoeden] = useState(25000);
-  const [beleggingen, setBeleggingen] = useState(13194);
+  const [beleggingen, setBeleggingen] = useState(() => portfolioWaarde > 0 ? portfolioWaarde : 13194);
   const [schulden, setSchulden] = useState(0);
   const [fiscaalPartner, setFiscaalPartner] = useState(false);
 
+  const portfolioGevuld = portfolioWaarde > 0;
   const r = berekenBox3(banktegoeden, beleggingen, schulden, fiscaalPartner);
 
   return (
@@ -75,12 +85,33 @@ export default function Box3Calculator() {
           onChange={setBanktegoeden}
           hint={`Fictief rendement: ${(FICTIEF_SPAREN * 100).toFixed(2)}%`}
         />
-        <InputField
-          label="Beleggingen & effecten"
-          value={beleggingen}
-          onChange={setBeleggingen}
-          hint={`Fictief rendement: ${(FICTIEF_BELEGGEN * 100).toFixed(2)}%`}
-        />
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-sm font-medium text-slate-700">Beleggingen &amp; effecten</label>
+            {portfolioGevuld && (
+              <button
+                onClick={() => setBeleggingen(portfolioWaarde)}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                title="Gebruik huidige portfoliowaarde"
+              >
+                <RefreshCw className="w-3 h-3" />
+                € {portfolioWaarde.toLocaleString("nl-NL")} vanuit portfolio
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">€</span>
+            <input
+              type="number"
+              value={beleggingen}
+              onChange={(e) => setBeleggingen(Number(e.target.value))}
+              className="w-full pl-8 pr-4 py-2.5 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              min={0}
+              step={100}
+            />
+          </div>
+          <p className="text-xs text-slate-400 mt-1">Fictief rendement: {(FICTIEF_BELEGGEN * 100).toFixed(2)}%</p>
+        </div>
         <InputField
           label="Schulden (drempel €3.400)"
           value={schulden}
