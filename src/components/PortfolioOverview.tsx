@@ -220,14 +220,11 @@ export default function PortfolioOverview() {
               <tr className="bg-slate-50 border-b border-slate-100">
                 <Th>Naam</Th>
                 <Th hide="hidden sm:table-cell">Type</Th>
-                <Th hide="hidden md:table-cell">Ticker / ISIN</Th>
                 <Th right hide="hidden sm:table-cell">Aantal</Th>
                 <Th right>Koers</Th>
                 <Th right hide="hidden md:table-cell">Valuta</Th>
                 <Th right>Waarde (EUR)</Th>
                 <Th right hide="hidden lg:table-cell">Gm. aank.</Th>
-                <Th right hide="hidden lg:table-cell">Dag</Th>
-                <Th right hide="hidden lg:table-cell">Dag %</Th>
                 <Th right hide="hidden md:table-cell">Rend. EUR</Th>
                 <Th right>Rend. %</Th>
                 <Th hide="hidden md:table-cell">{""}</Th>
@@ -243,10 +240,6 @@ export default function PortfolioOverview() {
                 const currency = s.currency || "EUR";
                 const sym = CURRENCY_SYMBOL[currency] ?? currency;
                 const lokaal = s.lokaleKoers ?? s.huidigeKoers ?? null;
-                const open   = s.openKoers ?? null;
-                const dagLokaal = lokaal != null && open != null && open > 0 ? lokaal - open : null;
-                const dagPct    = dagLokaal != null && open != null && open > 0 ? (dagLokaal / open) * 100 : null;
-                const dagPos    = (dagLokaal ?? 0) >= 0;
                 const isFallback = !s.huidigeKoers && s.degiroWaardeEur != null;
                 const waardeEur = s.marktwaarde ?? s.degiroWaardeEur ?? null;
                 const stoplossBreached = s.stoploss && s.huidigeKoers && s.aankoopkoers
@@ -254,9 +247,13 @@ export default function PortfolioOverview() {
 
                 return (
                   <tr key={s.id} className={`group hover:bg-slate-50 transition-colors ${stoplossBreached ? "bg-red-50" : ""}`}>
-                    {/* Naam */}
+                    {/* Naam + ticker eronder */}
                     <td className="px-2 py-2.5 min-w-32">
-                      <div className="font-medium text-slate-800 text-xs truncate max-w-40">{s.naam}</div>
+                      <div className="font-medium text-slate-800 text-xs truncate max-w-44">{s.naam}</div>
+                      <div className="text-slate-400 font-mono text-[10px] mt-0.5">
+                        {isPending ? "…" : (s.effectieveTicker ?? s.ticker)}
+                        {s.isin && <span className="text-slate-300 ml-1">· {s.isin}</span>}
+                      </div>
                       <PriceWarning warning={s.warning} lastPriceTimestamp={s.lastPriceTimestamp} degiroWaardeEur={s.degiroWaardeEur} />
                       <StoplossIndicator stoploss={s.stoploss} koers={s.huidigeKoers} aankoopkoers={s.aankoopkoers} />
                     </td>
@@ -264,11 +261,6 @@ export default function PortfolioOverview() {
                     <td className="px-2 py-2.5 hidden sm:table-cell">
                       <AssetTypeBadge assetType={s.assetType ?? "onbekend"} assetCategorie={s.assetCategorie} id={s.id}
                         onUpdate={(t) => updateStock(s.id, { assetType: t })} />
-                    </td>
-                    {/* Ticker / ISIN */}
-                    <td className="px-2 py-2.5 hidden md:table-cell">
-                      <div className="text-slate-500 font-mono text-[10px]">{isPending ? "…" : (s.effectieveTicker ?? s.ticker)}</div>
-                      {s.isin && <div className="text-slate-300 text-[10px]">{s.isin}</div>}
                     </td>
                     {/* Aantal — klikbaar om te bewerken */}
                     <td className="px-2 py-2.5 text-right hidden sm:table-cell">
@@ -334,22 +326,6 @@ export default function PortfolioOverview() {
                           <Pencil className="w-2.5 h-2.5" /><span>Invoeren</span>
                         </button>
                       )}
-                    </td>
-                    {/* Dagverandering */}
-                    <td className="px-2 py-2.5 text-right hidden lg:table-cell">
-                      {dagLokaal != null ? (
-                        <span className={dagPos ? "text-green-600" : "text-red-600"}>
-                          {dagPos ? "+" : ""}{sym} {Math.abs(dagLokaal).toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
-                        </span>
-                      ) : <span className="text-slate-300">—</span>}
-                    </td>
-                    {/* Dag % */}
-                    <td className="px-2 py-2.5 text-right hidden lg:table-cell">
-                      {dagPct != null ? (
-                        <span className={`font-medium ${dagPos ? "text-green-600" : "text-red-600"}`}>
-                          {dagPos ? "+" : ""}{dagPct.toFixed(2)}%
-                        </span>
-                      ) : <span className="text-slate-300">—</span>}
                     </td>
                     {/* Rendement EUR */}
                     <td className="px-2 py-2.5 text-right hidden md:table-cell">
@@ -418,12 +394,10 @@ export default function PortfolioOverview() {
                   <tr key={c.id} className="group hover:bg-slate-50">
                     <td className="px-2 py-2.5">
                       <div className="font-medium text-slate-800 text-xs">{c.naam}</div>
+                      <div className="text-slate-400 font-mono text-[10px] mt-0.5">{c.coinGeckoId}</div>
                     </td>
                     <td className="px-2 py-2.5 hidden sm:table-cell">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${TYPE_BADGE.crypto.cls}`}>C</span>
-                    </td>
-                    <td className="px-2 py-2.5 hidden md:table-cell">
-                      <div className="text-slate-400 font-mono text-[10px]">{c.coinGeckoId}</div>
                     </td>
                     <td className="px-2 py-2.5 text-right text-slate-500 hidden sm:table-cell">
                       {c.aantalCoins.toLocaleString("nl-NL", { maximumFractionDigits: 8 })}
@@ -463,8 +437,6 @@ export default function PortfolioOverview() {
                         </button>
                       )}
                     </td>
-                    <td className="px-2 py-2.5 hidden lg:table-cell" />
-                    <td className="px-2 py-2.5 hidden lg:table-cell" />
                     <td className="px-2 py-2.5 text-right hidden md:table-cell">
                       {rend.rendementEUR != null ? (
                         <span className={`font-medium ${rendPos ? "text-green-600" : "text-red-600"}`}>
@@ -505,13 +477,12 @@ export default function PortfolioOverview() {
                 <tr key={m.id} className="group hover:bg-slate-50">
                   <td className="px-2 py-2.5">
                     <div className="font-medium text-slate-800 text-xs">{METAL_LABELS[m.type]}</div>
-                    <div className="text-[10px] text-slate-400">{m.grammen} gram</div>
+                    <div className="text-slate-400 font-mono text-[10px] mt-0.5">
+                      {m.type === "goud" ? "xaueur" : m.type === "zilver" ? "xageur" : m.type}
+                    </div>
                   </td>
                   <td className="px-2 py-2.5 hidden sm:table-cell">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${TYPE_BADGE.metaal.cls}`}>M</span>
-                  </td>
-                  <td className="px-2 py-2.5 hidden md:table-cell text-[10px] text-slate-400 font-mono">
-                    {m.type === "goud" ? "xaueur" : m.type === "zilver" ? "xageur" : m.type}
                   </td>
                   <td className="px-2 py-2.5 text-right text-slate-500 hidden sm:table-cell">{m.grammen} g</td>
                   <td className="px-2 py-2.5 text-right font-medium text-slate-700">
@@ -521,8 +492,6 @@ export default function PortfolioOverview() {
                   <td className="px-2 py-2.5 text-right font-semibold text-slate-800">
                     {m.marktwaarde != null ? `€ ${fEur(m.marktwaarde)}` : "—"}
                   </td>
-                  <td className="px-2 py-2.5 hidden lg:table-cell" />
-                  <td className="px-2 py-2.5 hidden lg:table-cell" />
                   <td className="px-2 py-2.5 hidden lg:table-cell" />
                   <td className="px-2 py-2.5 hidden md:table-cell" />
                   <td className="px-2 py-2.5 text-slate-300">—</td>
@@ -562,8 +531,6 @@ export default function PortfolioOverview() {
                 <td className="px-2 py-3 text-right text-slate-600 hidden lg:table-cell">
                   {totaal.totaalGeïnvesteerd > 0 ? `€ ${fEur(totaal.totaalGeïnvesteerd)}` : "—"}
                 </td>
-                <td className="hidden lg:table-cell" />
-                <td className="hidden lg:table-cell" />
                 {/* Totaal rendement EUR */}
                 <td className="px-2 py-3 text-right hidden md:table-cell">
                   {totaal.totaalGeïnvesteerd > 0 && (
