@@ -36,7 +36,7 @@ const METAL_STOOQ: Record<MetaalType, { ticker: string; currency: string }> = {
   zilver:    { ticker: "xageur", currency: "EUR" },
   platina:   { ticker: "xptusd", currency: "USD" },
   palladium: { ticker: "xpdusd", currency: "USD" },
-  koper:     { ticker: "hgusd",  currency: "USD" },
+  koper:     { ticker: "hg.f",  currency: "USD" },
 };
 
 // ─── Context interface ────────────────────────────────────────────────────────
