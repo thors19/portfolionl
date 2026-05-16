@@ -59,11 +59,13 @@ export interface StockPosition {
   aankoopkoers: number | null;
   aankoopdatum: string | null;
   stoploss: StoplossConfig | null;
+  lastPriceTimestamp?: number | null;  // Unix ms — wanneer live koers voor het laatste succesvol opgehaald
+  effectieveTicker?: string;           // Ticker die daadwerkelijk werkte (kan afwijken na fallback)
   // Extra velden voor uitgebreide asset types
-  coupon?: number;             // obligaties: jaarlijks coupon %
-  looptijdDatum?: string;      // obligaties/spaar: vervaldatum ISO
-  rente?: number;              // spaargeld: jaarlijkse rente %
-  dividendYield?: number;      // REITs
+  coupon?: number;
+  looptijdDatum?: string;
+  rente?: number;
+  dividendYield?: number;
   warning?: string;
 }
 

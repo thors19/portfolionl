@@ -213,13 +213,30 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         updates.push(
           fetch(`/api/quotes?tickers=${params.join(",")}`)
             .then((r) => r.json())
-            .then((data: Record<string, { priceEur: number; error?: string }>) => {
+            .then((data: Record<string, { priceEur: number; usedTicker?: string; error?: string }>) => {
+              const now = Date.now();
               setStocksState((prev) => prev.map((s) => {
                 if (s.tickerBron === "pending" || s.tickerBron === "onbekend") return s;
                 const entry = data[s.ticker];
                 if (!entry) return s;
-                if (entry.error) return { ...s, marktwaarde: s.degiroWaardeEur ?? null, warning: `Live koers niet beschikbaar. ${s.degiroWaardeEur ? "Fallback actief." : ""}` };
-                return { ...s, huidigeKoers: entry.priceEur, huidigeKoersValuta: "EUR", marktwaarde: entry.priceEur * s.aantalAandelen, warning: undefined };
+                if (entry.error) {
+                  // Fallback naar DEGIRO CSV-waarde — bewaar timestamp als die al bekend was
+                  return {
+                    ...s,
+                    marktwaarde: s.degiroWaardeEur ?? null,
+                    warning: `stooq:${s.ticker}`,  // compact formaat — component parseert dit
+                  };
+                }
+                // Succesvol — eventueel effectieve ticker opslaan als die afweek
+                return {
+                  ...s,
+                  huidigeKoers: entry.priceEur,
+                  huidigeKoersValuta: "EUR",
+                  marktwaarde: entry.priceEur * s.aantalAandelen,
+                  lastPriceTimestamp: now,
+                  effectieveTicker: entry.usedTicker ?? s.ticker,
+                  warning: undefined,
+                };
               }));
             }).catch(() => {})
         );

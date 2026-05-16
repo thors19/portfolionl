@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePortfolio } from "@/lib/portfolioContext";
-import { AlertTriangle, Clock, Loader2, BarChart2, TrendingUp, TrendingDown, ShieldAlert, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertTriangle, Clock, Loader2, BarChart2, TrendingUp, TrendingDown, ShieldAlert, ArrowUpDown, ArrowUp, ArrowDown, Info } from "lucide-react";
 import Link from "next/link";
 import HistorischGrafiek from "./HistorischGrafiek";
 import { AssetType, MetaalType, StoplossConfig } from "@/lib/types";
@@ -46,6 +46,62 @@ function AssetTypeBadge({ type, id, onUpdate }: { type: AssetType; id: string; o
     </button>
   );
   void id;
+}
+
+/**
+ * Toont een koers-waarschuwing op basis van het `warning`-veld.
+ * Formaat "stooq:ticker" = Stooq kon geen koers vinden.
+ * Verberg het oranje blok als lastPriceTimestamp < 24u oud is.
+ */
+function PriceWarning({ warning, lastPriceTimestamp, degiroWaardeEur }: {
+  warning: string | undefined;
+  lastPriceTimestamp: number | null | undefined;
+  degiroWaardeEur: number | null | undefined;
+}) {
+  if (!warning) return null;
+
+  const isStooqFail = warning.startsWith("stooq:");
+  if (!isStooqFail) {
+    // Generieke waarschuwing (bijv. ISIN-lookup mislukt)
+    return (
+      <div className="flex items-start gap-1 text-xs text-amber-600 mt-0.5">
+        <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+        <span>{warning}</span>
+      </div>
+    );
+  }
+
+  const triedTicker = warning.slice("stooq:".length);
+  const ageMs = lastPriceTimestamp ? Date.now() - lastPriceTimestamp : null;
+  const isRecent = ageMs != null && ageMs < 24 * 3600 * 1000; // < 24 uur
+
+  function ageLabel(ms: number): string {
+    if (ms < 3600000) return `${Math.round(ms / 60000)} min geleden`;
+    if (ms < 86400000) return `${Math.round(ms / 3600000)} uur geleden`;
+    return `${Math.round(ms / 86400000)} dag${ms > 172800000 ? "en" : ""} geleden`;
+  }
+
+  if (isRecent && degiroWaardeEur) {
+    // Subtiele grijze notitie — niet storend
+    return (
+      <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
+        <Info className="w-2.5 h-2.5 shrink-0" />
+        <span>Live koers tijdelijk niet beschikbaar ({triedTicker})</span>
+      </div>
+    );
+  }
+
+  // Geen recente koers bekend — toon oranje waarschuwing met context
+  return (
+    <div className="flex items-start gap-1 text-xs text-amber-600 mt-0.5">
+      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+      <span>
+        Geen live koers voor <code className="bg-amber-100 px-0.5 rounded text-[10px]">{triedTicker}</code>
+        {!degiroWaardeEur && " — geen fallback beschikbaar"}
+        {ageMs ? ` · Laatste koers ${ageLabel(ageMs)}` : ""}
+      </span>
+    </div>
+  );
 }
 
 function StoplossIndicator({ stoploss, koers, aankoopkoers }: {
@@ -166,12 +222,11 @@ export default function PortfolioOverview() {
                         <span className="font-medium text-slate-800 text-sm">{s.naam}</span>
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">{isPending ? s.isin : s.ticker}</div>
-                      {s.warning && (
-                        <div className="flex items-start gap-1 text-xs text-amber-600 mt-0.5">
-                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                          <span className="line-clamp-1">{s.warning}</span>
-                        </div>
-                      )}
+                      <PriceWarning
+                        warning={s.warning}
+                        lastPriceTimestamp={s.lastPriceTimestamp}
+                        degiroWaardeEur={s.degiroWaardeEur}
+                      />
                       <StoplossIndicator stoploss={s.stoploss} koers={s.huidigeKoers} aankoopkoers={s.aankoopkoers} />
                     </td>
                     <td className="px-3 py-3 hidden sm:table-cell">
