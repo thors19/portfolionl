@@ -7,13 +7,13 @@ import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold, Italic, Heading2, Heading3, List, ListOrdered,
-  Quote, Link2, Sparkles, Save, Globe, ArrowLeft,
+  Quote, Link2, ClipboardPaste, Save, Globe, ArrowLeft,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   BlogArticle, saveArticle, generateSlug, calculateLeestijd, getArticleById,
 } from "@/lib/blogStore";
-import AIWriteModal from "./AIWriteModal";
+import PasteMarkdownModal from "./PasteMarkdownModal";
 import { v4 as uuidv4 } from "uuid";
 
 const CATEGORIES = ["ETFs", "Aandelen", "Crypto", "Edelmetalen", "Strategie", "Fiscaal", "Overig"];
@@ -32,7 +32,7 @@ export default function BlogEditor({ articleId }: Props) {
   const [tags, setTags] = useState("");
   const [datum, setDatum] = useState(new Date().toISOString().slice(0, 10));
   const [gepubliceerd, setGepubliceerd] = useState(false);
-  const [showAI, setShowAI] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
   const [wordCount, setWordCount] = useState(0);
@@ -96,7 +96,7 @@ export default function BlogEditor({ articleId }: Props) {
     setSaving(false);
   }
 
-  function insertAI(html: string) {
+  function insertPasted(html: string) {
     editor?.commands.setContent(html);
     setWordCount(editor?.getText().trim().split(/\s+/).filter(Boolean).length ?? 0);
   }
@@ -107,7 +107,7 @@ export default function BlogEditor({ articleId }: Props) {
 
   return (
     <>
-      {showAI && <AIWriteModal onClose={() => setShowAI(false)} onInsert={insertAI} />}
+      {showPaste && <PasteMarkdownModal onClose={() => setShowPaste(false)} onInsert={insertPasted} />}
 
       <div className="min-h-screen bg-slate-50">
         {/* Top bar */}
@@ -128,11 +128,11 @@ export default function BlogEditor({ articleId }: Props) {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">{wordCount} woorden · ~{leestijd} min</span>
               <button
-                onClick={() => setShowAI(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm font-medium hover:bg-purple-100"
+                onClick={() => setShowPaste(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-100"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                Schrijf met AI
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                Plak markdown
               </button>
               <button
                 onClick={() => save(false)}
